@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-26T18:11:34.816Z",
+  "startup": [
+    {
+      "attempt": 1,
+      "readyMs": 498,
+      "launchToDomMs": 884
+    },
+    {
+      "attempt": 2,
+      "readyMs": 496,
+      "launchToDomMs": 889
+    },
+    {
+      "attempt": 3,
+      "readyMs": 557,
+      "launchToDomMs": 975
+    }
+  ],
+  "idle": {
+    "processes": 5,
+    "memoryMB": 357.8,
+    "cpuPercentOfOneCore": 0.7,
+    "windowMs": 30000
+  },
+  "running": {
+    "idleFps": 58,
+    "runningFps": 60,
+    "fpsDrop": -2,
+    "extraCpuPercentOfOneCoreDuringRun": 109.1,
+    "note": "fps=窗口每秒渲染帧数（requestAnimationFrame）；任务为 12 秒 ping 空转"
+  },
+  "note": "环境：本机实测；readyMs=Electron 主进程启动到窗口 did-finish-load；资源为 Tempo 全部进程之和"
+}

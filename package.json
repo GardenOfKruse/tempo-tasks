@@ -1,0 +1,89 @@
+{
+  "name": "tempo-tasks",
+  "version": "0.1.0",
+  "description": "Tempo · 好看的 Windows 定时任务卡片工具",
+  "main": "dist-electron/main.js",
+  "author": "GardenOfKruse",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/build.mjs && electron .",
+    "start": "npm run build && electron .",
+    "build": "npm run typecheck && node scripts/build.mjs",
+    "build:fast": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "tsc -p tsconfig.electron.json && node --test \"tests/*.test.mjs\"",
+    "test:all": "npm run test && npm run e2e && node tests/e2e/catchup.mjs && node tests/e2e/review.mjs && node tests/e2e/soak.mjs",
+    "e2e": "node tests/e2e/run.mjs",
+    "shot": "node scripts/screenshot.mjs",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "dev.tempo.tasks",
+    "productName": "Tempo",
+    "directories": {
+      "output": "dist-release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Tempo-Portable-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Tempo-Setup-${version}.exe",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "playwright-core": "^1.49.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GardenOfKruse/tempo-tasks.git"
+  },
+  "homepage": "https://github.com/GardenOfKruse/tempo-tasks#readme",
+  "bugs": {
+    "url": "https://github.com/GardenOfKruse/tempo-tasks/issues"
+  }
+}
