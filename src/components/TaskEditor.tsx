@@ -464,6 +464,20 @@ export function TaskEditor({
             )}
             {f.kind === 'cron' && (
               <>
+                <div className="cron-templates">
+                  {(
+                    [
+                      ['*/5 * * * *', '每 5 分钟'],
+                      ['0 * * * *', '每小时'],
+                      ['30 8 * * *', '每天 08:30'],
+                      ['30 8 * * 1-5', '工作日 08:30'],
+                    ] as [string, string][]
+                  ).map(([expr, label]) => (
+                    <button key={expr} className="cron-tpl" onClick={() => set({ cronExpr: expr })}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="field-row">
                   <input
                     className="field mono"

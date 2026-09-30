@@ -416,6 +416,17 @@ function createWindow(): void {
     if (resolveCloseBehavior(store.snapshot.settings, { quitting }) === 'hide') {
       e.preventDefault()
       mainWindow?.hide()
+      // 首次隐藏时用系统通知解释行为（之后不再打扰）
+      if (!store.snapshot.settings.trayHintShown) {
+        if (Notification.isSupported()) {
+          const n = new Notification({ title: 'Tempo 仍在运行', body: '已最小化到系统托盘，定时任务继续调度。点击托盘图标可恢复窗口。' })
+          n.on('click', () => showMainWindow())
+          n.show()
+        }
+        store.mutate((d) => {
+          d.settings.trayHintShown = true
+        })
+      }
     }
   })
   mainWindow.on('closed', () => {
