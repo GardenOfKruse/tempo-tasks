@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { RunRecord, Task } from '../api'
 import { RUN_TYPE_LABEL, fmtCountdown, fmtDur, fmtRel } from '../format'
 import { Icon } from '../icons'
@@ -5,25 +6,26 @@ import { formatSchedule } from '../../electron/schedule'
 
 export interface TaskCardProps {
   task: Task
+  /** 已按展示精度分桶的时钟（displayClock）：同桶内 props 不变，memo 跳过重渲染 */
   now: number
   running: boolean
-  live: RunRecord | undefined
-  lastRun: RunRecord | null | undefined
-  onOpen: () => void
-  onRun: () => void
-  onStop: () => void
-  onToggleEnabled: () => void
-  onEdit: () => void
-  onDelete: () => void
-  onMenu: (x: number, y: number) => void
+  liveStartedAt: number | undefined
+  lastRun: RunRecord | null
+  onOpen: (id: string) => void
+  onRun: (id: string) => void
+  onStop: (id: string) => void
+  onToggleEnabled: (t: Task) => void
+  onEdit: (t: Task) => void
+  onDelete: (t: Task) => void
+  onMenu: (t: Task, x: number, y: number) => void
 }
 
-export function TaskCard(p: TaskCardProps) {
+export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
   const t = p.task
   const idx = Math.min(t.createdAt % 12, 11) // 入场动画的微差异
   const last = p.lastRun
   const lastChip = p.running
-    ? { cls: 'run', text: `运行中 ${fmtDur(p.now - (p.live?.startedAt ?? p.now))}` }
+    ? { cls: 'run', text: `运行中 ${fmtDur(p.now - (p.liveStartedAt ?? p.now))}` }
     : last
       ? last.status === 'success'
         ? { cls: 'ok', text: `成功 · ${fmtDur(last.durationMs)}` }
@@ -44,10 +46,10 @@ export function TaskCard(p: TaskCardProps) {
       style={{ animationDelay: `${idx * 26}ms` }}
       data-testid="task-card"
       data-task-name={t.name}
-      onClick={p.onOpen}
+      onClick={() => p.onOpen(t.id)}
       onContextMenu={(e) => {
         e.preventDefault()
-        p.onMenu(e.clientX, e.clientY)
+        p.onMenu(t, e.clientX, e.clientY)
       }}
     >
       {p.running && <div className="run-bar" />}
@@ -63,7 +65,7 @@ export function TaskCard(p: TaskCardProps) {
           aria-label="更多操作"
           onClick={(e) => {
             e.stopPropagation()
-            p.onMenu(e.clientX, e.clientY)
+            p.onMenu(t, e.clientX, e.clientY)
           }}
         >
           <Icon name="kebab" size={15} />
@@ -117,16 +119,16 @@ export function TaskCard(p: TaskCardProps) {
         </span>
         <span className="card-run-actions" onClick={(e) => e.stopPropagation()}>
           {p.running && t.concurrency === 'parallel' && (
-            <button className="mini-btn" title="再启动一轮（并行）" onClick={p.onRun}>
+            <button className="mini-btn" title="再启动一轮（并行）" onClick={() => p.onRun(t.id)}>
               <Icon name="play" size={12} />
             </button>
           )}
           {p.running ? (
-            <button className="mini-btn danger" title="停止" onClick={p.onStop}>
+            <button className="mini-btn danger" title="停止" onClick={() => p.onStop(t.id)}>
               <Icon name="stop" size={11} />
             </button>
           ) : (
-            <button className="mini-btn" title={t.enabled ? '立即运行' : '已暂停'} onClick={p.onRun} disabled={!t.enabled}>
+            <button className="mini-btn" title={t.enabled ? '立即运行' : '已暂停'} onClick={() => p.onRun(t.id)} disabled={!t.enabled}>
               <Icon name="play" size={12} />
             </button>
           )}
@@ -134,4 +136,4 @@ export function TaskCard(p: TaskCardProps) {
       </div>
     </div>
   )
-}
+})

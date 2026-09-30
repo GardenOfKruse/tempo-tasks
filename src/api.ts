@@ -11,6 +11,7 @@ interface TempoApi {
   runNow(id: string): Promise<{ ok: boolean; error?: string }>
   cancelRun(id: string): Promise<{ ok: boolean; error?: string }>
   listRuns(taskId: string): Promise<RunRecord[]>
+  clearRuns(taskId: string): Promise<{ ok: boolean; error?: string }>
   liveRun(taskId: string): Promise<{ status: RunStatus; stdout: string; stderr: string; startedAt: number } | null>
   exportTasks(): Promise<{ ok: boolean; canceled?: boolean; count?: number; error?: string }>
   importTasks(): Promise<{ ok: boolean; canceled?: boolean; count?: number; error?: string }>
@@ -22,6 +23,7 @@ interface TempoApi {
   probePython(): Promise<{ ok: boolean; version?: string; error?: string }>
   onTasksChanged(cb: (tasks: Task[]) => void): () => void
   onRunUpdate(cb: (record: RunRecord) => void): () => void
+  onRunsChanged(cb: (taskId: string) => void): () => void
   onNotice(cb: (text: string) => void): () => void
   onOpenTask(cb: (taskId: string) => void): () => void
 }

@@ -3,7 +3,8 @@ import type { RunRecord, Task } from '../api'
 import { RUN_TYPE_FULL, STATUS_LABEL, TRIGGER_LABEL, fmtAt, fmtCountdown, fmtDur, fmtRel } from '../format'
 import { Icon } from '../icons'
 import { formatSchedule } from '../../electron/schedule'
-import { Sheet } from './common'
+import { matchRunFilter, type RunFilter } from '../../electron/runs'
+import { Sheet, ConfirmBox } from './common'
 
 function RunIco({ status }: { status: RunRecord['status'] }) {
   if (status === 'running') return <span className="run-ico running" style={{ animation: 'pulse 1.1s ease-in-out infinite' }} />
@@ -81,6 +82,8 @@ export function TaskDetail({
 }) {
   const [runs, setRuns] = useState<RunRecord[] | null>(null)
   const [openRunId, setOpenRunId] = useState<string | null>(null)
+  const [runFilter, setRunFilter] = useState<RunFilter>('all')
+  const [confirmClear, setConfirmClear] = useState(false)
   const running = live !== null
 
   useEffect(() => {
@@ -106,6 +109,16 @@ export function TaskDetail({
     if (live) return [live, ...sorted.filter((r) => r.id !== live.id)]
     return sorted
   }, [runs, live])
+
+  const shown = useMemo(() => (runFilter === 'all' ? merged : merged.filter((r) => matchRunFilter(r, runFilter))), [merged, runFilter])
+
+  const clearHistory = async () => {
+    const r = await window.tempo.clearRuns(task.id)
+    if (r.ok) {
+      setRuns([])
+      setOpenRunId(null)
+    }
+  }
 
 
   return (
@@ -206,15 +219,41 @@ export function TaskDetail({
 
       <div className="sect-title">
         执行历史
-        <span className="count-pill">{merged.length > 0 ? `${merged.length} 条记录` : ''}</span>
+        <span className="count-pill">{merged.length > 0 ? `${shown.length === merged.length ? `${merged.length} 条记录` : `${shown.length} / ${merged.length} 条`}` : ''}</span>
+        {merged.length > 0 && (
+          <>
+            <span className="grow" />
+            <div className="chip-row detail-chips">
+              {(
+                [
+                  ['all', '全部'],
+                  ['ok', '成功'],
+                  ['fail', '失败'],
+                ] as [RunFilter, string][]
+              ).map(([k, label]) => (
+                <button key={k} className={`chip${runFilter === k ? ' on' : ''}`} onClick={() => setRunFilter(k)} data-testid={`run-filter-${k}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button className="tclear" onClick={() => setConfirmClear(true)} data-testid="run-clear">
+              <Icon name="trash" size={12} />
+              清空
+            </button>
+          </>
+        )}
       </div>
       {merged.length === 0 ? (
         <div className="empty" style={{ padding: '30px 20px' }}>
           <p style={{ marginTop: 0 }}>还没有执行记录。点击「立即运行」验证一次，或等待计划触发。</p>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="empty" style={{ padding: '30px 20px' }}>
+          <p style={{ marginTop: 0 }}>没有符合筛选的记录</p>
+        </div>
       ) : (
         <div className="run-list" data-testid="run-list">
-          {merged.map((r) => (
+          {shown.map((r) => (
             <div key={r.id} className={`run-item${openRunId === r.id ? ' active' : ''}`}>
               <div
                 className="run-item-head"
@@ -233,6 +272,19 @@ export function TaskDetail({
             </div>
           ))}
         </div>
+      )}
+
+      {confirmClear && (
+        <ConfirmBox
+          title="清空执行历史"
+          message={`「${task.name}」的全部执行记录（含输出）将被删除，任务本身不受影响。此操作无法撤销。`}
+          confirmLabel="清空"
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={() => {
+            setConfirmClear(false)
+            clearHistory()
+          }}
+        />
       )}
     </Sheet>
   )

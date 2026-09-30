@@ -19,6 +19,7 @@ const api = {
   cancelRun: (id: string) => ipcRenderer.invoke('task:cancel', id),
   listRuns: (taskId: string): Promise<RunRecord[]> => ipcRenderer.invoke('runs:list', taskId),
   liveRun: (taskId: string) => ipcRenderer.invoke('runs:live', taskId),
+  clearRuns: (taskId: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('runs:clear', taskId),
   exportTasks: () => ipcRenderer.invoke('tasks:exportAll'),
   importTasks: () => ipcRenderer.invoke('tasks:importFile'),
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
@@ -29,6 +30,7 @@ const api = {
   probePython: () => ipcRenderer.invoke('app:probePython'),
   onTasksChanged: (cb: (tasks: Task[]) => void) => subscribe<[Task[]]>('tempo:tasks-changed', cb),
   onRunUpdate: (cb: (record: RunRecord) => void) => subscribe<[RunRecord]>('tempo:run-update', cb),
+  onRunsChanged: (cb: (taskId: string) => void) => subscribe<[string]>('tempo:runs-changed', cb),
   onNotice: (cb: (text: string) => void) => subscribe<[string]>('tempo:notice', cb),
   onOpenTask: (cb: (taskId: string) => void) => subscribe<[string]>('tempo:open-task', cb),
 }

@@ -12,12 +12,9 @@ export function fmtCountdown(nextMs: number | null, now: number): string {
   if (diff <= 0) return '即将执行'
   const d = new Date(nextMs)
   const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  // 秒级倒数只保留最后一分钟；更远只到分钟（配合卡片时钟分桶，避免逐秒重渲染）
   if (diff < 60_000) return `${Math.ceil(diff / 1000)} 秒后`
-  if (diff < 3_600_000) {
-    const m = Math.floor(diff / 60_000)
-    const s = Math.floor((diff % 60_000) / 1000)
-    return s > 0 ? `${m} 分 ${pad(s)} 秒后` : `${m} 分钟后`
-  }
+  if (diff < 3_600_000) return `${Math.ceil(diff / 60_000)} 分钟后`
   const today0 = new Date(now)
   today0.setHours(0, 0, 0, 0)
   const next0 = new Date(nextMs)

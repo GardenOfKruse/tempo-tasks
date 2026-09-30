@@ -6,6 +6,7 @@ import { TaskEditor } from './components/TaskEditor'
 import { TaskDetail } from './components/TaskDetail'
 import { ConfirmBox, PopMenu, Toasts, type MenuItem, type ToastItem } from './components/common'
 import { duplicateTaskInput } from '../electron/schedule'
+import { displayClock, isFailStatus } from '../electron/runs'
 
 type Filter = 'all' | 'running' | 'paused' | 'failed' | 'missed'
 
@@ -13,7 +14,7 @@ let toastSeq = 1
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[] | null>(null)
-  const [settings, setSettings] = useState<Settings>({ theme: 'system', sortMode: 'created' })
+  const [settings, setSettings] = useState<Settings>({ theme: 'system', sortMode: 'created', minimizeToTray: false })
   const [now, setNow] = useState(() => Date.now())
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -45,6 +46,13 @@ export default function App() {
     const unsubs: Array<() => void> = [
       window.tempo.onNotice((text) => toast(text)),
       window.tempo.onOpenTask((id) => setDetailId(id)),
+      // 历史被清空后重取卡片「上次结果」缓存
+      window.tempo.onRunsChanged((taskId) => {
+        window.tempo.listRuns(taskId).then((rs) => {
+          lastRunsRef.current[taskId] = rs.at(-1) ?? null
+          setLastRuns({ ...lastRunsRef.current })
+        })
+      }),
     ]
     window.tempo.listTasks().then((ts) => {
       setTasks(ts)
@@ -172,7 +180,7 @@ export default function App() {
     for (const t of tasks) {
       if (isRunning(t.id)) c.running++
       if (!t.enabled) c.paused++
-      if (lastRuns[t.id] && lastRuns[t.id]!.status !== 'success' && lastRuns[t.id]!.status !== 'canceled' && lastRuns[t.id]!.status !== 'running') c.failed++
+      if (lastRuns[t.id] && isFailStatus(lastRuns[t.id]!.status)) c.failed++
       if (t.missedOnce || t.missedCount > 0) c.missed++
     }
     return c
@@ -191,7 +199,7 @@ export default function App() {
         list = list.filter((t) => !t.enabled)
         break
       case 'failed':
-        list = list.filter((t) => lastRuns[t.id] && ['failed', 'timeout'].includes(lastRuns[t.id]!.status))
+        list = list.filter((t) => lastRuns[t.id] && isFailStatus(lastRuns[t.id]!.status))
         break
       case 'missed':
         list = list.filter((t) => t.missedOnce || t.missedCount > 0)
@@ -212,20 +220,30 @@ export default function App() {
 
   const detailTask = tasks?.find((t) => t.id === detailId) ?? null
 
-  /* ---------- 操作 ---------- */
+  /* ---------- 操作（全部稳定引用，配合 TaskCard 的 React.memo） ---------- */
 
-  const runNow = async (id: string) => {
-    const r = await window.tempo.runNow(id)
-    if (!r.ok) toast(r.error ?? '无法启动', 'err')
-  }
+  const runNow = useCallback(
+    async (id: string) => {
+      const r = await window.tempo.runNow(id)
+      if (!r.ok) toast(r.error ?? '无法启动', 'err')
+    },
+    [toast],
+  )
 
-  const toggleEnabled = async (t: Task) => {
-    const r = await window.tempo.setEnabled(t.id, !t.enabled)
-    if (!r.ok) toast(r.error ?? '操作失败', 'err')
-    else toast(t.enabled ? `「${t.name}」已暂停` : `「${t.name}」已启用`)
-  }
+  const stopRun = useCallback((id: string) => {
+    window.tempo.cancelRun(id)
+  }, [])
 
-  const deleteTask = (t: Task) => {
+  const toggleEnabled = useCallback(
+    async (t: Task) => {
+      const r = await window.tempo.setEnabled(t.id, !t.enabled)
+      if (!r.ok) toast(r.error ?? '操作失败', 'err')
+      else toast(t.enabled ? `「${t.name}」已暂停` : `「${t.name}」已启用`)
+    },
+    [toast],
+  )
+
+  const deleteTask = useCallback((t: Task) => {
     setConfirming({
       title: '删除任务',
       message: `「${t.name}」将被删除，包括它的全部执行历史。此操作无法撤销。`,
@@ -238,34 +256,44 @@ export default function App() {
         } else toast(r.error ?? '删除失败', 'err')
       },
     })
-  }
+  }, [])
 
-  const duplicateTask = async (t: Task) => {
-    const input = duplicateTaskInput(t)
-    const r = await window.tempo.createTask(input)
-    if (r.ok) toast(`已创建副本「${input.name}」`)
-    else toast(r.error ?? '创建失败', 'err')
-  }
+  const duplicateTask = useCallback(
+    async (t: Task) => {
+      const input = duplicateTaskInput(t)
+      const r = await window.tempo.createTask(input)
+      if (r.ok) toast(`已创建副本「${input.name}」`)
+      else toast(r.error ?? '创建失败', 'err')
+    },
+    [toast],
+  )
 
-  const taskMenu = (t: Task, x: number, y: number) => {
-    const running = isRunning(t.id)
-    setMenu({
-      x,
-      y,
-      items: [
-        running
-          ? { label: '停止运行', icon: 'stop' as const, action: () => window.tempo.cancelRun(t.id) }
-          : { label: '立即运行', icon: 'play' as const, action: () => runNow(t.id) },
-        { label: t.enabled ? '暂停任务' : '启用任务', icon: (t.enabled ? 'pause' : 'play') as never, action: () => toggleEnabled(t) },
-        { label: '-', icon: 'x' as const, action: () => {} },
-        { label: '编辑', icon: 'pencil' as const, action: () => setEditing(t) },
-        { label: '创建副本', icon: 'copy' as const, action: () => duplicateTask(t) },
-        { label: '打开详情', icon: 'terminal' as const, action: () => setDetailId(t.id) },
-        { label: '-', icon: 'x' as const, action: () => {} },
-        { label: '删除任务', icon: 'trash' as const, danger: true, action: () => deleteTask(t) },
-      ],
-    })
-  }
+  // 菜单打开时才读运行态：引用稳定，不随 runningIds 逐次变化
+  const runningIdsRef = useRef(runningIds)
+  runningIdsRef.current = runningIds
+
+  const taskMenu = useCallback(
+    (t: Task, x: number, y: number) => {
+      const running = (runningIdsRef.current.get(t.id)?.size ?? 0) > 0
+      setMenu({
+        x,
+        y,
+        items: [
+          running
+            ? { label: '停止运行', icon: 'stop' as const, action: () => window.tempo.cancelRun(t.id) }
+            : { label: '立即运行', icon: 'play' as const, action: () => runNow(t.id) },
+          { label: t.enabled ? '暂停任务' : '启用任务', icon: (t.enabled ? 'pause' : 'play') as never, action: () => toggleEnabled(t) },
+          { label: '-', icon: 'x' as const, action: () => {} },
+          { label: '编辑', icon: 'pencil' as const, action: () => setEditing(t) },
+          { label: '创建副本', icon: 'copy' as const, action: () => duplicateTask(t) },
+          { label: '打开详情', icon: 'terminal' as const, action: () => setDetailId(t.id) },
+          { label: '-', icon: 'x' as const, action: () => {} },
+          { label: '删除任务', icon: 'trash' as const, danger: true, action: () => deleteTask(t) },
+        ],
+      })
+    },
+    [runNow, toggleEnabled, duplicateTask, deleteTask],
+  )
 
   const openSettingsMenu = (x: number, y: number) => {
     setMenu({
@@ -299,6 +327,30 @@ export default function App() {
                 ] as const
               ).map(([k, label]) => (
                 <button key={k} className={cur.sortMode === k ? 'on' : ''} onClick={() => window.tempo.setSettings({ sortMode: k }).then((v) => { setSettings(v); toast(`已按${k === 'next' ? '下次执行' : k === 'created' ? '新建优先' : '名称'}排序`) })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="row">
+            <span>关窗时</span>
+            <div className="seg" data-testid="menu-tray">
+              {(
+                [
+                  [false, '直接退出'],
+                  [true, '最小到托盘'],
+                ] as [boolean, string][]
+              ).map(([k, label]) => (
+                <button
+                  key={String(k)}
+                  className={cur.minimizeToTray === k ? 'on' : ''}
+                  onClick={() =>
+                    window.tempo.setSettings({ minimizeToTray: k }).then((v) => {
+                      setSettings(v)
+                      toast(k ? '关闭窗口将最小化到托盘，托盘菜单可退出' : '关闭窗口即退出')
+                    })
+                  }
+                >
                   {label}
                 </button>
               ))}
@@ -437,23 +489,26 @@ export default function App() {
             )
           ) : (
             <div className="grid">
-              {visibleTasks.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={t}
-                  now={now}
-                  running={isRunning(t.id)}
-                  live={liveRuns[t.id]}
-                  lastRun={lastRuns[t.id] ?? null}
-                  onOpen={() => setDetailId(t.id)}
-                  onRun={() => runNow(t.id)}
-                  onStop={() => window.tempo.cancelRun(t.id)}
-                  onToggleEnabled={() => toggleEnabled(t)}
-                  onEdit={() => setEditing(t)}
-                  onDelete={() => deleteTask(t)}
-                  onMenu={(x, y) => taskMenu(t, x, y)}
-                />
-              ))}
+              {visibleTasks.map((t) => {
+                const running = isRunning(t.id)
+                return (
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    now={displayClock({ nextRunAt: t.nextRunAt, lastRunAt: t.lastRunAt, running, now })}
+                    running={running}
+                    liveStartedAt={liveRuns[t.id]?.startedAt}
+                    lastRun={lastRuns[t.id] ?? null}
+                    onOpen={setDetailId}
+                    onRun={runNow}
+                    onStop={stopRun}
+                    onToggleEnabled={toggleEnabled}
+                    onEdit={setEditing}
+                    onDelete={deleteTask}
+                    onMenu={taskMenu}
+                  />
+                )
+              })}
             </div>
           )}
         </div>

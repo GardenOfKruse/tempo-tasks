@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, nativeTheme, Notification, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, nativeTheme, Notification, Menu, Tray } from 'electron'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -7,6 +7,7 @@ import { Executor } from './executor'
 import { Scheduler } from './scheduler'
 import { validateTaskInput } from './schedule'
 import { buildExport, parseImport } from './transfer'
+import { resolveCloseBehavior, trayActions, TRAY_TOOLTIP } from './tray'
 import type { RunRecord, Settings, Task, TaskInput, TriggerKind } from './types'
 import { newId } from './types'
 
@@ -28,6 +29,8 @@ store.onSaveError = (err) => {
 }
 const executor = new Executor()
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let quitting = false
 let gotFirstPaint = false
 let gotFirstPaintAt: number | null = null
 
@@ -97,6 +100,36 @@ const scheduler = new Scheduler(store, executor, {
   },
 })
 executor.setEventSink({ onRunUpdate: (r) => broadcastRun(r) })
+
+// ---- 托盘：设置开启「最小化到托盘」时创建；点击恢复窗口 ----
+function showMainWindow(): void {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function syncTray(settings: Settings): void {
+  if (settings.minimizeToTray === true && tray === null) {
+    tray = new Tray(path.join(__dirname, '..', 'build', 'icon.ico'))
+    tray.setToolTip(TRAY_TOOLTIP)
+    tray.setContextMenu(
+      Menu.buildFromTemplate(
+        trayActions().map((a) => ({
+          label: a.label,
+          click: () => {
+            if (a.id === 'show') showMainWindow()
+            else app.quit()
+          },
+        })),
+      ),
+    )
+    tray.on('click', () => showMainWindow())
+  } else if (settings.minimizeToTray !== true && tray !== null) {
+    tray.destroy()
+    tray = null
+  }
+}
 
 // ---- IPC ----
 function taskById(id: string): Task | undefined {
@@ -195,6 +228,13 @@ function registerIpc(): void {
 
   ipcMain.handle('runs:list', (_e, taskId: string) => store.runsOf(taskId))
   ipcMain.handle('runs:live', (_e, taskId: string) => executor.livePreview(taskId))
+  ipcMain.handle('runs:clear', (_e, taskId: string) => {
+    if (!taskById(taskId)) return { ok: false, error: '任务不存在' }
+    store.clearRuns(taskId)
+    // 卡片的「上次结果」由渲染端缓存，广播清空事件让其重取
+    mainWindow?.webContents.send('tempo:runs-changed', taskId)
+    return { ok: true }
+  })
 
   ipcMain.handle('tasks:exportAll', async () => {
     const tasks = store.snapshot.tasks
@@ -253,6 +293,7 @@ function registerIpc(): void {
     const next = { ...store.snapshot.settings, ...patch }
     store.replaceSettings(next)
     applyTheme(next.theme)
+    syncTray(next)
     return next
   })
 
@@ -358,6 +399,13 @@ function createWindow(): void {
       console.log(`[perf] window ready in ${gotFirstPaintAt}ms`)
     }
   })
+  mainWindow.on('close', (e) => {
+    // 开启「最小化到托盘」：拦下关窗只隐藏，调度与托盘常驻
+    if (resolveCloseBehavior(store.snapshot.settings, { quitting }) === 'hide') {
+      e.preventDefault()
+      mainWindow?.hide()
+    }
+  })
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -398,17 +446,14 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.show()
-      mainWindow.focus()
-    }
+    showMainWindow()
   })
   Menu.setApplicationMenu(null)
 
   app.whenReady().then(() => {
     if (process.env.TEMPO_FORCE_DARK === '1') store.snapshot.settings.theme = 'dark'
     applyTheme(store.snapshot.settings.theme)
+    syncTray(store.snapshot.settings)
     registerIpc()
     createWindow()
     scheduler.start()
@@ -420,6 +465,7 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
+    quitting = true
     executor.cancelAll()
     store.flush()
   })

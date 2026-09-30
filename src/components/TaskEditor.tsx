@@ -265,17 +265,26 @@ export function TaskEditor({
     return { text: '应用未运行期间错过的调度，会在下次启动或系统唤醒时补跑一次', cls: '' }
   }, [f.kind, f.catchUp])
 
+  // Cron 预览随时间前进重算：30 秒一跳足够（分钟粒度展示），仅在 Cron 模式下运行
+  const [clockTick, setClockTick] = useState(() => Date.now())
+  useEffect(() => {
+    if (f.kind !== 'cron') return
+    setClockTick(Date.now())
+    const iv = setInterval(() => setClockTick(Date.now()), 30_000)
+    return () => clearInterval(iv)
+  }, [f.kind])
+
   // Cron 实时预览：接下来 3 次执行时间（与调度器同一引擎计算）；非法表达式直接给出原因
   const cronInfo = useMemo((): { times: string[]; error: string | null } => {
     if (f.kind !== 'cron') return { times: [], error: null }
     const parsed = parseCron(f.cronExpr)
     if (!parsed.ok) return { times: [], error: parsed.error }
-    const now = Date.now()
+    const now = clockTick
     return {
       times: previewNextRuns({ kind: 'cron', expr: f.cronExpr }, now, 3).map((ms) => fmtWhen(ms, now)),
       error: null,
     }
-  }, [f.kind, f.cronExpr])
+  }, [f.kind, f.cronExpr, clockTick])
 
   return (
     <Sheet

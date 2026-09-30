@@ -15,7 +15,7 @@ const DEFAULT_DATA: StoreData = {
   schemaVersion: 1,
   tasks: [],
   runs: {},
-  settings: { theme: 'system', sortMode: 'created' },
+  settings: { theme: 'system', sortMode: 'created', minimizeToTray: false },
 }
 
 function isValidTaskShape(t: unknown): t is Task {
@@ -165,6 +165,12 @@ export class Store {
 
   runsOf(taskId: string): RunRecord[] {
     return this.data.runs[taskId] ?? []
+  }
+
+  clearRuns(taskId: string): void {
+    if (this.data.runs[taskId] === undefined) return
+    delete this.data.runs[taskId]
+    this.saveSoon()
   }
 
   destroy(): void {

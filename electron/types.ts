@@ -63,6 +63,7 @@ export interface RunRecord {
 export interface Settings {
   theme: 'system' | 'light' | 'dark'
   sortMode: 'created' | 'name' | 'next'
+  minimizeToTray: boolean // 关窗最小化到托盘（默认关：关窗即退出）
 }
 
 export const MAX_RUNS_PER_TASK = 50
