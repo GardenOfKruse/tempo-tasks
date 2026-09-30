@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunRecord, Settings, Task } from './api'
 import { Icon } from './icons'
 import { TaskCard } from './components/TaskCard'
 import { TaskEditor } from './components/TaskEditor'
 import { TaskDetail } from './components/TaskDetail'
 import { ConfirmBox, PopMenu, Toasts, type MenuItem, type ToastItem } from './components/common'
+import { SettingsSheet } from './components/SettingsSheet'
 import { duplicateTaskInput } from '../electron/schedule'
 import { displayClock, isFailStatus } from '../electron/runs'
 
@@ -26,7 +27,8 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[]; extra?: (s: Settings) => React.ReactNode } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const lastRunsRef = useRef<Record<string, RunRecord | null>>({})
 
@@ -64,10 +66,6 @@ export default function App() {
       })
     })
     window.tempo.getSettings().then(setSettings)
-    window.tempo.appInfo().then((info) => {
-      const el = document.getElementById('ver')
-      if (el) el.textContent = 'v' + info.version
-    })
 
     unsubs.push(
       window.tempo.onTasksChanged((ts) => {
@@ -309,107 +307,15 @@ export default function App() {
     [runNow, toggleEnabled, togglePinned, duplicateTask, deleteTask],
   )
 
-  const openSettingsMenu = (x: number, y: number) => {
-    setMenu({
-      x,
-      y,
-      items: [],
-      extra: (cur: Settings) => (
-        <>
-          <div className="row">
-            <span>主题</span>
-            <div className="seg">
-              {(['system', 'light', 'dark'] as const).map((th) => (
-                <button
-                  key={th}
-                  className={cur.theme === th ? 'on' : ''}
-                  onClick={() => window.tempo.setSettings({ theme: th }).then((v) => { setSettings(v); toast(`主题已切换为${th === 'system' ? '跟随系统' : th === 'light' ? '浅色' : '深色'}`) })}
-                >
-                  {th === 'system' ? '自动' : th === 'light' ? '浅色' : '深色'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="row">
-            <span>排序</span>
-            <div className="seg">
-              {(
-                [
-                  ['next', '下次执行'],
-                  ['created', '新建优先'],
-                  ['name', '名称'],
-                ] as const
-              ).map(([k, label]) => (
-                <button key={k} className={cur.sortMode === k ? 'on' : ''} onClick={() => window.tempo.setSettings({ sortMode: k }).then((v) => { setSettings(v); toast(`已按${k === 'next' ? '下次执行' : k === 'created' ? '新建优先' : '名称'}排序`) })}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="row">
-            <span>关窗时</span>
-            <div className="seg" data-testid="menu-tray">
-              {(
-                [
-                  [false, '直接退出'],
-                  [true, '最小到托盘'],
-                ] as [boolean, string][]
-              ).map(([k, label]) => (
-                <button
-                  key={String(k)}
-                  className={cur.minimizeToTray === k ? 'on' : ''}
-                  onClick={() =>
-                    window.tempo.setSettings({ minimizeToTray: k }).then((v) => {
-                      setSettings(v)
-                      toast(k ? '关闭窗口将最小化到托盘，托盘菜单可退出' : '关闭窗口即退出')
-                    })
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="pop-sep" />
-          <button onClick={() => window.tempo.openDataDir()}>
-            <Icon name="folder" size={15} />
-            打开数据文件夹
-          </button>
-          <button
-            data-testid="menu-export"
-            onClick={() => {
-              setMenu(null)
-              window.tempo.exportTasks().then((r) => {
-                if (r.ok) toast(`已导出 ${r.count} 个任务`)
-                else if (!r.canceled) toast(r.error ?? '导出失败', 'err')
-              })
-            }}
-          >
-            <Icon name="download" size={15} />
-            导出全部任务
-          </button>
-          <button
-            data-testid="menu-import"
-            onClick={() => {
-              setMenu(null)
-              window.tempo.importTasks().then((r) => {
-                if (r.ok) toast(`已导入 ${r.count} 个任务`)
-                else if (!r.canceled) toast(r.error ?? '导入失败', 'err')
-              })
-            }}
-          >
-            <Icon name="upload" size={15} />
-            导入任务
-          </button>
-          <div className="meta" id="app-meta">
-            Tempo for Windows · <span id="ver">v0.1.0</span>
-            <br />
-            调度在应用运行期间进行；错过补跑见任务设置
-          </div>
-        </>
-      ),
-    })
-  }
+  const patchSettings = useCallback(
+    (patch: Partial<Settings>, msg?: string) => {
+      window.tempo.setSettings(patch).then((v) => {
+        setSettings(v)
+        if (msg) toast(msg)
+      })
+    },
+    [toast],
+  )
 
   /* ---------- URL 参数驱动的 UI 状态（截图/验收用） ---------- */
   useEffect(() => {
@@ -417,11 +323,7 @@ export default function App() {
     const ui = new URLSearchParams(window.location.search).get('ui')
     if (ui === 'editor') setEditing('new')
     if (ui === 'detail' && tasks.length > 0) setDetailId(sortedFirstId(tasks))
-    if (ui === 'menu' && tasks.length > 0) {
-      // 截图 kebab 菜单：放在卡片右上角附近
-      setMenu({ x: window.innerWidth - 340, y: 200, items: [] })
-      setEditing(null)
-    }
+    if (ui === 'settings') setSettingsOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks === null])
 
@@ -455,7 +357,7 @@ export default function App() {
                 <Icon name="search" size={14} />
                 <input ref={searchRef} placeholder="搜索任务或命令" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
-              <button className="btn icon-btn subtle" title="设置" onClick={(e) => openSettingsMenu(e.clientX - 180, e.clientY + 12)}>
+              <button className="btn icon-btn subtle" title="设置" data-testid="btn-settings" onClick={() => setSettingsOpen(true)}>
                 <Icon name="gear" size={16} />
               </button>
               <button className="btn primary" onClick={() => setEditing('new')} data-testid="btn-new">
@@ -577,17 +479,16 @@ export default function App() {
         />
       )}
 
-      {menu && (
-        <PopMenu
-          x={menu.x}
-          y={menu.y}
-          items={menu.items}
-          className={menu.items.length === 0 ? 'settings-pop' : undefined}
-          onClose={() => setMenu(null)}
-        >
-          {menu.extra?.(settings)}
-        </PopMenu>
+      {settingsOpen && (
+        <SettingsSheet
+          settings={settings}
+          onPatch={patchSettings}
+          onClose={() => setSettingsOpen(false)}
+          toast={toast}
+        />
       )}
+
+      {menu && <PopMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 
       <Toasts items={toasts} onDismiss={(id) => setToasts((ts) => ts.filter((t) => t.id !== id))} />
     </div>

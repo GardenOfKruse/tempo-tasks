@@ -1,5 +1,5 @@
 /**
- * 用户体验审查：编辑回填 / 校验报错 / 快捷键 / 缩放 / 设置菜单。
+ * 用户体验审查：编辑回填 / 校验报错 / 快捷键 / 缩放 / 设置面板。
  * 运行: node tests/e2e/review.mjs
  */
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -72,15 +72,20 @@ try {
   check('窄窗口下卡片不越界', cardBox && cardBox.width >= 300 && cardBox.width <= 660, JSON.stringify(cardBox))
   await win.setViewportSize({ width: 1120, height: 740 })
 
-  // 7. 设置菜单
+  // 7. 设置面板（独立 Sheet）
   await win.click('.hero-actions .icon-btn.subtle')
-  await win.waitForSelector('.settings-pop')
-  await win.locator('.settings-pop .seg >> text=深色').click()
+  await win.waitForSelector('[data-testid="settings-sheet"]')
+  await win.locator('[data-testid="settings-sheet"] .seg >> text=深色').click()
   await win.waitForTimeout(400)
   const darkOn = await win.evaluate(() => document.body.classList.contains('theme-dark'))
   check('设置内切换深色主题', darkOn, '')
   await win.screenshot({ path: 'docs/shots/08-settings-dark.png' })
+  await win.locator('[data-testid="settings-sheet"] .seg >> text=名称').click()
+  await win.waitForSelector('.toast:has-text("排序")')
+  check('设置内切换排序有 toast 反馈', true)
   await win.keyboard.press('Escape')
+  await win.waitForSelector('[data-testid="settings-sheet"]', { state: 'detached' })
+  check('Escape 关闭设置面板', true)
 } catch (e) {
   check('审查流程未抛异常', false, e.message.split('\n')[0])
 } finally {

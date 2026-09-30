@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { matchRunFilter, filterRuns, isFailStatus, displayClock } from '../dist-electron/runs.js'
+import { matchRunFilter, filterRuns, isFailStatus, displayClock, summarizeRuns } from '../dist-electron/runs.js'
 
 const run = (status) => ({ id: 'r', taskId: 't', trigger: 'manual', startedAt: 0, endedAt: 1, status, exitCode: 0, durationMs: 1, stdout: '', stderr: '', truncated: false })
 
@@ -33,6 +33,42 @@ test('isFailStatus: 与卡片失败徽标同口径', () => {
   assert.equal(isFailStatus('success'), false)
   assert.equal(isFailStatus('canceled'), false)
   assert.equal(isFailStatus('running'), false)
+})
+
+test('summarizeRuns: 窗口边界含起点，早于 sinceMs 的不计', () => {
+  const mk = (startedAt, status, durationMs = 100) => ({ ...run(status), startedAt, durationMs })
+  const since = 1_000_000
+  const s = summarizeRuns([mk(since - 1, 'success'), mk(since, 'success'), mk(since + 5, 'failed')], since)
+  assert.equal(s.total, 2)
+  assert.equal(s.success, 1)
+  assert.equal(s.successRate, 50)
+})
+
+test('summarizeRuns: 成功率不含运行中，canceled 计入分母', () => {
+  const mk = (status, durationMs = 100) => ({ ...run(status), startedAt: 0, durationMs })
+  // success + canceled + running：decided = 2，成功率 50%；触发次数 3
+  const s = summarizeRuns([mk('success'), mk('canceled'), mk('running', null)], 0)
+  assert.equal(s.total, 3)
+  assert.equal(s.success, 1)
+  assert.equal(s.successRate, 50)
+  // 全部仍在运行：成功次数为 0，无已完成 → 成功率 null
+  const onlyRunning = summarizeRuns([mk('running', null), mk('running', null)], 0)
+  assert.equal(onlyRunning.total, 2)
+  assert.equal(onlyRunning.success, 0)
+  assert.equal(onlyRunning.successRate, null)
+})
+
+test('summarizeRuns: 平均耗时只统计已结束且有时长的记录，四舍五入取整', () => {
+  const mk = (status, durationMs) => ({ ...run(status), startedAt: 0, durationMs })
+  const s = summarizeRuns([mk('success', 100), mk('failed', 201), mk('running', null)], 0)
+  assert.equal(s.avgDurationMs, 151) // (100 + 201) / 2 = 150.5 → 151（四舍五入）
+  // durationMs 缺失（异常数据）不参与平均
+  assert.equal(summarizeRuns([mk('success', null)], 0).avgDurationMs, null)
+})
+
+test('summarizeRuns: 空窗口返回全零与 null（详情页显示暂无执行）', () => {
+  const s = summarizeRuns([], 0)
+  assert.deepEqual(s, { total: 0, success: 0, successRate: null, avgDurationMs: null })
 })
 
 test('displayClock: 运行中/刚结束/最后一分钟内为秒级原值', () => {

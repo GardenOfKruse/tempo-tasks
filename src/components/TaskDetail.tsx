@@ -3,7 +3,7 @@ import type { RunRecord, Task } from '../api'
 import { RUN_TYPE_FULL, STATUS_LABEL, TRIGGER_LABEL, fmtAt, fmtCountdown, fmtDur, fmtRel } from '../format'
 import { Icon } from '../icons'
 import { formatSchedule } from '../../electron/schedule'
-import { matchRunFilter, type RunFilter } from '../../electron/runs'
+import { matchRunFilter, summarizeRuns, type RunFilter } from '../../electron/runs'
 import { Sheet, ConfirmBox } from './common'
 
 function RunIco({ status }: { status: RunRecord['status'] }) {
@@ -112,6 +112,9 @@ export function TaskDetail({
 
   const shown = useMemo(() => (runFilter === 'all' ? merged : merged.filter((r) => matchRunFilter(r, runFilter))), [merged, runFilter])
 
+  // 近 7 天统计：与历史列表同源（含运行中的直播条目），随秒级 now 滚动窗口
+  const summary = useMemo(() => summarizeRuns(merged, now - 7 * 86_400_000), [merged, now])
+
   const clearHistory = async () => {
     const r = await window.tempo.clearRuns(task.id)
     if (r.ok) {
@@ -157,6 +160,28 @@ export function TaskDetail({
         </>
       }
     >
+      {summary.total === 0 ? (
+        <div className="detail-stats" data-testid="detail-stats">
+          <span className="dstat-none">近 7 天暂无执行</span>
+        </div>
+      ) : (
+        <div className="detail-stats" data-testid="detail-stats">
+          <span className="dstat-cap">近 7 天</span>
+          <div className="dstat">
+            <div className="n">{summary.total} 次</div>
+            <div className="l">触发</div>
+          </div>
+          <div className="dstat">
+            <div className="n">{summary.successRate === null ? '—' : `${summary.successRate}%`}</div>
+            <div className="l">成功率</div>
+          </div>
+          <div className="dstat">
+            <div className="n">{fmtDur(summary.avgDurationMs)}</div>
+            <div className="l">平均耗时</div>
+          </div>
+        </div>
+      )}
+
       <div className="detail-grid">
         <div className="kv">
           <div className="k">执行方式</div>
