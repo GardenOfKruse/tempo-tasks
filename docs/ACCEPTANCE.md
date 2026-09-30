@@ -1,6 +1,6 @@
 # Tempo v0.1.0 验收报告
 
-> 生成时间：2026-09-27 04:20（Asia/Shanghai） · 自主开发窗口 00:33 → 08:30
+> 最近更新：2026-10-01 06:45（Asia/Shanghai） · 累计版本 v0.1.0 → v0.7.1 · 仓库: github.com/GardenOfKruse/tempo-tasks
 
 ## 一、交付物
 
