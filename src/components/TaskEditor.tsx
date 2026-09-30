@@ -126,9 +126,11 @@ function CodeArea({ value, onChange, placeholder, testid }: { value: string; onC
       // 选区缩进：给选中行首插入两空格
       const before = value.slice(0, start)
       const lineStart = before.lastIndexOf('\n') + 1
-      const nv = value.slice(0, lineStart) + value.slice(lineStart, end).replace(/^/gm, '  ') + value.slice(end)
+      const block = value.slice(lineStart, end)
+      const nv = value.slice(0, lineStart) + block.replace(/^/gm, '  ') + value.slice(end)
       onChange(nv)
-      requestAnimationFrame(() => ta.setSelectionRange(start + 2, start + 2 + (end - lineStart)))
+      const lineCount = block.split('\n').length
+      requestAnimationFrame(() => ta.setSelectionRange(start + 2, end + 2 * lineCount))
     } else {
       onChange(value.slice(0, start) + '  ' + value.slice(end))
       requestAnimationFrame(() => ta.setSelectionRange(start + 2, start + 2))

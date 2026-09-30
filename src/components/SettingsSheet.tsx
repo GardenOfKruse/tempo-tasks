@@ -24,14 +24,14 @@ export function SettingsSheet({
     window.tempo.exportTasks().then((r) => {
       if (r.ok) toast(`已导出 ${r.count} 个任务`)
       else if (!r.canceled) toast(r.error ?? '导出失败', 'err')
-    })
+    }).catch(() => toast('导出失败', 'err'))
   }
 
   const importTasks = () => {
     window.tempo.importTasks().then((r) => {
       if (r.ok) toast(`已导入 ${r.count} 个任务`)
       else if (!r.canceled) toast(r.error ?? '导入失败', 'err')
-    })
+    }).catch(() => toast('导入失败', 'err'))
   }
 
   return (

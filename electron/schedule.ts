@@ -114,6 +114,8 @@ export function validateSchedule(schedule: Schedule): string | null {
       const r = parseCron(schedule.expr)
       return r.ok ? null : `Cron 表达式无效：${r.error}`
     }
+    default:
+      return '执行计划类型无效'
   }
 }
 

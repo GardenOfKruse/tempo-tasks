@@ -61,7 +61,13 @@ export function parseImport(raw: string): ImportResult {
     if (!s || typeof s !== 'object' || typeof (s as Record<string, unknown>).kind !== 'string') {
       return { ok: false, error: `第 ${i + 1} 个任务无效：缺少执行计划` }
     }
-    const v = validateTaskInput(raw as TaskInput)
+    let v: ReturnType<typeof validateTaskInput>
+    try {
+      // 外部数据字段可能为 undefined（如 {"kind":"daily"} 缺 time），校验内部会抛 TypeError——转为逐条友好报错
+      v = validateTaskInput(raw as TaskInput)
+    } catch {
+      return { ok: false, error: `第 ${i + 1} 个任务无效：执行计划字段不完整` }
+    }
     if (!v.ok) return { ok: false, error: `第 ${i + 1} 个任务无效：${v.error}` }
     out.push(v.value)
   }
