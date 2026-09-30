@@ -206,15 +206,19 @@ export default function App() {
         break
     }
     const sorted = [...list]
-    if (settings.sortMode === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+    // 各排序模式下置顶任务永远排在最前，组内再按所选方式排序
+    const byPinned = (a: Task, b: Task) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)
+    if (settings.sortMode === 'name') sorted.sort((a, b) => byPinned(a, b) || a.name.localeCompare(b.name, 'zh-Hans-CN'))
     else if (settings.sortMode === 'next') {
       sorted.sort((a, b) => {
+        const p = byPinned(a, b)
+        if (p !== 0) return p
         const av = a.enabled && a.nextRunAt !== null ? a.nextRunAt : Number.MAX_SAFE_INTEGER
         const bv = b.enabled && b.nextRunAt !== null ? b.nextRunAt : Number.MAX_SAFE_INTEGER
         if (av !== bv) return av - bv
         return b.createdAt - a.createdAt
       })
-    } else sorted.sort((a, b) => b.createdAt - a.createdAt)
+    } else sorted.sort((a, b) => byPinned(a, b) || b.createdAt - a.createdAt)
     return sorted
   }, [tasks, query, filter, runningIds, isRunning, lastRuns, settings.sortMode])
 
@@ -239,6 +243,15 @@ export default function App() {
       const r = await window.tempo.setEnabled(t.id, !t.enabled)
       if (!r.ok) toast(r.error ?? '操作失败', 'err')
       else toast(t.enabled ? `「${t.name}」已暂停` : `「${t.name}」已启用`)
+    },
+    [toast],
+  )
+
+  const togglePinned = useCallback(
+    async (t: Task) => {
+      const r = await window.tempo.setPinned(t.id, !t.pinned)
+      if (!r.ok) toast(r.error ?? '操作失败', 'err')
+      else toast(t.pinned ? `「${t.name}」已取消置顶` : `「${t.name}」已置顶`)
     },
     [toast],
   )
@@ -283,6 +296,7 @@ export default function App() {
             ? { label: '停止运行', icon: 'stop' as const, action: () => window.tempo.cancelRun(t.id) }
             : { label: '立即运行', icon: 'play' as const, action: () => runNow(t.id) },
           { label: t.enabled ? '暂停任务' : '启用任务', icon: (t.enabled ? 'pause' : 'play') as never, action: () => toggleEnabled(t) },
+          { label: t.pinned ? '取消置顶' : '置顶', icon: 'pin' as const, action: () => togglePinned(t) },
           { label: '-', icon: 'x' as const, action: () => {} },
           { label: '编辑', icon: 'pencil' as const, action: () => setEditing(t) },
           { label: '创建副本', icon: 'copy' as const, action: () => duplicateTask(t) },
@@ -292,7 +306,7 @@ export default function App() {
         ],
       })
     },
-    [runNow, toggleEnabled, duplicateTask, deleteTask],
+    [runNow, toggleEnabled, togglePinned, duplicateTask, deleteTask],
   )
 
   const openSettingsMenu = (x: number, y: number) => {

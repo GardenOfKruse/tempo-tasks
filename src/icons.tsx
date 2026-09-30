@@ -25,6 +25,7 @@ export type IconName =
   | 'moon'
   | 'download'
   | 'upload'
+  | 'pin'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -111,6 +112,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9" />
       <path d="M4.5 16.5v1.7A2.3 2.3 0 0 0 6.8 20.5h10.4a2.3 2.3 0 0 0 2.3-2.3v-1.7" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M12 16.5V21" />
+      <path d="M9.5 11.2a1.8 1.8 0 0 1-1 1.6l-1 .5A1.5 1.5 0 0 0 6.7 14.6v.4h10.6v-.4a1.5 1.5 0 0 0-.8-1.3l-1-.5a1.8 1.8 0 0 1-1-1.6V6.5h.5a1.75 1.75 0 0 0 0-3.5H9a1.75 1.75 0 0 0 0 3.5h.5z" />
     </>
   ),
 }

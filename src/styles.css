@@ -785,6 +785,12 @@ textarea.field {
   white-space: nowrap;
 }
 
+/* 置顶图钉 */
+.pin-badge {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* ---------- 空状态 ---------- */
 
 .empty {

@@ -58,6 +58,7 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
         <span className="card-name" title={t.name}>
           {t.name}
         </span>
+        {t.pinned && <Icon name="pin" size={12.5} className="pin-badge" />}
         {!t.enabled && <span className="miss-badge">已暂停</span>}
         {t.enabled && !p.running && (t.missedOnce || t.missedCount > 0) && <span className="miss-badge">已错过</span>}
         <button

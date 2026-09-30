@@ -146,6 +146,7 @@ function registerIpc(): void {
     const task: Task = {
       id: newId(),
       ...v.value,
+      pinned: false,
       createdAt: now,
       updatedAt: now,
       lastRunAt: null,
@@ -184,6 +185,16 @@ function registerIpc(): void {
     } else {
       task.nextRunAt = null
     }
+    task.updatedAt = Date.now()
+    store.saveSoon()
+    mainWindow?.webContents.send('tempo:tasks-changed', store.snapshot.tasks)
+    return { ok: true }
+  })
+
+  ipcMain.handle('task:setPinned', (_e, id: string, pinned: boolean) => {
+    const task = taskById(id)
+    if (!task) return { ok: false, error: '任务不存在' }
+    task.pinned = pinned === true
     task.updatedAt = Date.now()
     store.saveSoon()
     mainWindow?.webContents.send('tempo:tasks-changed', store.snapshot.tasks)
@@ -275,6 +286,7 @@ function registerIpc(): void {
     const created: Task[] = parsed.tasks.map((input) => ({
       id: newId(),
       ...input,
+      pinned: false,
       createdAt: now,
       updatedAt: now,
       lastRunAt: null,

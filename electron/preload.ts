@@ -14,6 +14,7 @@ const api = {
   createTask: (input: TaskInput) => ipcRenderer.invoke('task:create', input),
   updateTask: (id: string, input: TaskInput) => ipcRenderer.invoke('task:update', id, input),
   setEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('task:setEnabled', id, enabled),
+  setPinned: (id: string, pinned: boolean) => ipcRenderer.invoke('task:setPinned', id, pinned),
   deleteTask: (id: string) => ipcRenderer.invoke('task:delete', id),
   runNow: (id: string) => ipcRenderer.invoke('task:runNow', id),
   cancelRun: (id: string) => ipcRenderer.invoke('task:cancel', id),

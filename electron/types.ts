@@ -24,6 +24,7 @@ export interface Task {
   catchUp: boolean // 应用未运行/睡眠期间错过调度后，启动或唤醒时补跑一次
   notify: boolean // 完成时系统通知
   enabled: boolean
+  pinned: boolean // 置顶：各排序模式下永远排在最前
   concurrency: ConcurrencyPolicy
   createdAt: number
   updatedAt: number

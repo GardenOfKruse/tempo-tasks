@@ -7,6 +7,7 @@ interface TempoApi {
   createTask(input: TaskInput): Promise<{ ok: boolean; id?: string; error?: string }>
   updateTask(id: string, input: TaskInput): Promise<{ ok: boolean; error?: string }>
   setEnabled(id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }>
+  setPinned(id: string, pinned: boolean): Promise<{ ok: boolean; error?: string }>
   deleteTask(id: string): Promise<{ ok: boolean; error?: string }>
   runNow(id: string): Promise<{ ok: boolean; error?: string }>
   cancelRun(id: string): Promise<{ ok: boolean; error?: string }>
