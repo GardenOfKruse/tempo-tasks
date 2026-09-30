@@ -998,6 +998,17 @@ textarea.field {
   color: var(--green);
 }
 
+.cron-preview {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent);
+  line-height: 1.5;
+}
+
+.cron-preview.error {
+  color: var(--red);
+}
+
 .field-row {
   display: flex;
   gap: 8px;

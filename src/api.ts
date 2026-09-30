@@ -12,6 +12,8 @@ interface TempoApi {
   cancelRun(id: string): Promise<{ ok: boolean; error?: string }>
   listRuns(taskId: string): Promise<RunRecord[]>
   liveRun(taskId: string): Promise<{ status: RunStatus; stdout: string; stderr: string; startedAt: number } | null>
+  exportTasks(): Promise<{ ok: boolean; canceled?: boolean; count?: number; error?: string }>
+  importTasks(): Promise<{ ok: boolean; canceled?: boolean; count?: number; error?: string }>
   getSettings(): Promise<Settings>
   setSettings(patch: Partial<Settings>): Promise<Settings>
   appInfo(): Promise<{ version: string; dataDir: string; electron: string; readyMs: number | null }>

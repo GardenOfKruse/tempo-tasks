@@ -1,5 +1,5 @@
 /** 计划模型：下一次执行时间计算、展示文案、校验（纯函数） */
-import type { ConcurrencyPolicy, RunType, Schedule, TaskInput } from './types'
+import type { ConcurrencyPolicy, RunType, Schedule, Task, TaskInput } from './types'
 import { cronNext, parseCron } from './cron'
 
 export function parseHM(s: string): { h: number; m: number } | null {
@@ -58,6 +58,36 @@ export function nextRunAt(schedule: Schedule, afterMs: number): number | null {
       if (!parsed.ok) return null
       return cronNext(parsed.fields, afterMs)
     }
+  }
+}
+
+/** 从 afterMs 起接下来 count 次执行时间（本地毫秒）；表达式无效或不再执行时提前截断 */
+export function previewNextRuns(schedule: Schedule, afterMs: number, count = 3): number[] {
+  const out: number[] = []
+  let cursor = afterMs
+  for (let i = 0; i < count; i++) {
+    const next = nextRunAt(schedule, cursor)
+    if (next === null) break
+    out.push(next)
+    cursor = next
+  }
+  return out
+}
+
+/** 复制任务：仅取配置，去掉 id/历史等运行态；名称去掉旧「副本」后缀再追加，避免连环叠加 */
+export function duplicateTaskInput(t: Task): TaskInput {
+  const base = t.name.replace(/ 副本$/, '')
+  return {
+    name: `${base.length > 57 ? base.slice(0, 57) : base} 副本`,
+    runType: t.runType,
+    command: t.command,
+    cwd: t.cwd,
+    timeoutSec: t.timeoutSec,
+    schedule: structuredClone(t.schedule),
+    catchUp: t.catchUp,
+    notify: t.notify,
+    enabled: t.enabled,
+    concurrency: t.concurrency,
   }
 }
 

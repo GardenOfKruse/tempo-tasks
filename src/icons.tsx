@@ -23,6 +23,8 @@ export type IconName =
   | 'warn'
   | 'skip'
   | 'moon'
+  | 'download'
+  | 'upload'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -99,6 +101,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   skip: <path d="M5 5.5v13l9-6.5-9-6.5zM17 5.5v13" />,
   moon: <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />,
+  download: (
+    <>
+      <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" />
+      <path d="M4.5 16.5v1.7A2.3 2.3 0 0 0 6.8 20.5h10.4a2.3 2.3 0 0 0 2.3-2.3v-1.7" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9" />
+      <path d="M4.5 16.5v1.7A2.3 2.3 0 0 0 6.8 20.5h10.4a2.3 2.3 0 0 0 2.3-2.3v-1.7" />
+    </>
+  ),
 }
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }): React.ReactElement {

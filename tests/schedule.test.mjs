@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { nextRunAt, parseHM, parseOnceAt, formatSchedule, validateTaskInput, validateSchedule } from '../dist-electron/schedule.js'
+import { nextRunAt, parseHM, parseOnceAt, formatSchedule, validateTaskInput, validateSchedule, previewNextRuns, duplicateTaskInput } from '../dist-electron/schedule.js'
 
 const at = (y, mo, d, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi, 0, 0).getTime()
 const ymd = (ms) => {
@@ -109,4 +109,76 @@ test('formatSchedule: 中文摘要', () => {
   assert.match(formatSchedule({ kind: 'weekly', days: [0, 1, 2, 3, 4, 5, 6], time: '09:00' }), /每天/)
   assert.match(formatSchedule({ kind: 'cron', expr: '*/5 * * * *' }), /Cron/)
   assert.match(formatSchedule({ kind: 'once', at: ymd(at(2026, 9, 27, 9, 0)) }), /9 月 27 日 09:00/)
+})
+
+test('previewNextRuns: daily 链式取接下来 3 天', () => {
+  const times = previewNextRuns({ kind: 'daily', time: '08:30' }, at(2026, 9, 27, 9, 0), 3)
+  assert.deepEqual(times, [at(2026, 9, 28, 8, 30), at(2026, 9, 29, 8, 30), at(2026, 9, 30, 8, 30)])
+})
+
+test('previewNextRuns: once 只有一个时间点，不会循环填充', () => {
+  const s = { kind: 'once', at: ymd(at(2026, 9, 27, 10, 0)) }
+  assert.deepEqual(previewNextRuns(s, at(2026, 9, 27, 0, 0), 3), [at(2026, 9, 27, 10, 0)])
+  assert.deepEqual(previewNextRuns(s, at(2026, 9, 28, 0, 0), 3), [])
+})
+
+test('previewNextRuns: interval 按间隔链式推进', () => {
+  const times = previewNextRuns({ kind: 'interval', seconds: 3600 }, at(2026, 9, 27, 8, 0), 3)
+  assert.deepEqual(times, [at(2026, 9, 27, 9, 0), at(2026, 9, 27, 10, 0), at(2026, 9, 27, 11, 0)])
+})
+
+test('previewNextRuns: 无效 cron 返回空数组而非抛错', () => {
+  assert.deepEqual(previewNextRuns({ kind: 'cron', expr: '99 * * * *' }, at(2026, 9, 27, 0, 0), 3), [])
+  assert.deepEqual(previewNextRuns({ kind: 'cron', expr: 'bad' }, at(2026, 9, 27, 0, 0), 3), [])
+})
+
+test('previewNextRuns: cron 永不匹配时为空（2 月 31 日不存在）', () => {
+  assert.deepEqual(previewNextRuns({ kind: 'cron', expr: '0 0 31 2 *' }, at(2026, 9, 27, 0, 0), 3), [])
+})
+
+function mkTask(over = {}) {
+  return {
+    id: 't1',
+    name: '抓取数据',
+    runType: 'cmd',
+    command: 'echo hi',
+    cwd: 'C:\\tmp',
+    timeoutSec: 120,
+    schedule: { kind: 'daily', time: '08:30' },
+    catchUp: false,
+    notify: true,
+    enabled: false,
+    concurrency: 'parallel',
+    createdAt: 1000,
+    updatedAt: 2000,
+    lastRunAt: 3000,
+    nextRunAt: 4000,
+    missedCount: 2,
+    missedOnce: true,
+    ...over,
+  }
+}
+
+test('duplicateTaskInput: 仅取配置，追加「副本」，不携带运行态字段', () => {
+  const input = duplicateTaskInput(mkTask())
+  assert.equal(input.name, '抓取数据 副本')
+  assert.deepEqual(input.schedule, { kind: 'daily', time: '08:30' })
+  assert.equal(input.enabled, false) // 暂停状态如实复制
+  assert.equal(input.concurrency, 'parallel')
+  assert.equal(input.notify, true)
+  assert.equal('id' in input, false)
+  assert.equal('createdAt' in input, false)
+  assert.equal('lastRunAt' in input, false)
+  assert.equal('nextRunAt' in input, false)
+  assert.equal('missedCount' in input, false)
+  // 副本必须能通过新建任务的同一套校验
+  assert.equal(validateTaskInput(input).ok, true)
+})
+
+test('duplicateTaskInput: 重复复制不叠加「副本」后缀；超长名截断到 60 字内', () => {
+  assert.equal(duplicateTaskInput(mkTask({ name: '备份 副本' })).name, '备份 副本')
+  const long = '很'.repeat(70)
+  const dup = duplicateTaskInput(mkTask({ name: long }))
+  assert.equal(dup.name.length <= 60, true)
+  assert.ok(dup.name.endsWith('副本'))
 })

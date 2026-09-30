@@ -6,6 +6,7 @@ import { Store } from './storage'
 import { Executor } from './executor'
 import { Scheduler } from './scheduler'
 import { validateTaskInput } from './schedule'
+import { buildExport, parseImport } from './transfer'
 import type { RunRecord, Settings, Task, TaskInput, TriggerKind } from './types'
 import { newId } from './types'
 
@@ -194,6 +195,58 @@ function registerIpc(): void {
 
   ipcMain.handle('runs:list', (_e, taskId: string) => store.runsOf(taskId))
   ipcMain.handle('runs:live', (_e, taskId: string) => executor.livePreview(taskId))
+
+  ipcMain.handle('tasks:exportAll', async () => {
+    const tasks = store.snapshot.tasks
+    if (tasks.length === 0) return { ok: false, error: '没有任务可导出' }
+    if (!mainWindow) return { ok: false, error: '窗口未就绪' }
+    const day = new Date().toISOString().slice(0, 10)
+    const r = await dialog.showSaveDialog(mainWindow, {
+      title: '导出任务',
+      defaultPath: `tempo-tasks-${day}.json`,
+      filters: [{ name: 'Tempo 任务', extensions: ['json'] }],
+    })
+    if (r.canceled || !r.filePath) return { ok: false, canceled: true }
+    try {
+      fs.writeFileSync(r.filePath, JSON.stringify(buildExport(tasks), null, 2), 'utf-8')
+      return { ok: true, count: tasks.length }
+    } catch (e) {
+      return { ok: false, error: `写入失败：${e instanceof Error ? e.message : String(e)}`.slice(0, 120) }
+    }
+  })
+
+  ipcMain.handle('tasks:importFile', async () => {
+    if (!mainWindow) return { ok: false, error: '窗口未就绪' }
+    const r = await dialog.showOpenDialog(mainWindow, {
+      title: '导入任务',
+      filters: [{ name: 'Tempo 任务', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
+    if (r.canceled || r.filePaths.length === 0) return { ok: false, canceled: true }
+    let raw: string
+    try {
+      raw = fs.readFileSync(r.filePaths[0], 'utf-8')
+    } catch (e) {
+      return { ok: false, error: `读取失败：${e instanceof Error ? e.message : String(e)}`.slice(0, 120) }
+    }
+    const parsed = parseImport(raw)
+    if (!parsed.ok) return parsed
+    const now = Date.now()
+    const created: Task[] = parsed.tasks.map((input) => ({
+      id: newId(),
+      ...input,
+      createdAt: now,
+      updatedAt: now,
+      lastRunAt: null,
+      nextRunAt: null,
+      missedCount: 0,
+      missedOnce: false,
+    }))
+    store.mutate((d) => d.tasks.push(...created))
+    for (const task of created) scheduler.recompute(task)
+    mainWindow?.webContents.send('tempo:tasks-changed', store.snapshot.tasks)
+    return { ok: true, count: created.length }
+  })
 
   ipcMain.handle('settings:get', () => store.snapshot.settings)
   ipcMain.handle('settings:set', (_e, patch: Partial<Settings>) => {

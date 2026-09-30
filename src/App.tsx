@@ -5,6 +5,7 @@ import { TaskCard } from './components/TaskCard'
 import { TaskEditor } from './components/TaskEditor'
 import { TaskDetail } from './components/TaskDetail'
 import { ConfirmBox, PopMenu, Toasts, type MenuItem, type ToastItem } from './components/common'
+import { duplicateTaskInput } from '../electron/schedule'
 
 type Filter = 'all' | 'running' | 'paused' | 'failed' | 'missed'
 
@@ -55,6 +56,10 @@ export default function App() {
       })
     })
     window.tempo.getSettings().then(setSettings)
+    window.tempo.appInfo().then((info) => {
+      const el = document.getElementById('ver')
+      if (el) el.textContent = 'v' + info.version
+    })
 
     unsubs.push(
       window.tempo.onTasksChanged((ts) => {
@@ -235,6 +240,13 @@ export default function App() {
     })
   }
 
+  const duplicateTask = async (t: Task) => {
+    const input = duplicateTaskInput(t)
+    const r = await window.tempo.createTask(input)
+    if (r.ok) toast(`已创建副本「${input.name}」`)
+    else toast(r.error ?? '创建失败', 'err')
+  }
+
   const taskMenu = (t: Task, x: number, y: number) => {
     const running = isRunning(t.id)
     setMenu({
@@ -247,6 +259,7 @@ export default function App() {
         { label: t.enabled ? '暂停任务' : '启用任务', icon: (t.enabled ? 'pause' : 'play') as never, action: () => toggleEnabled(t) },
         { label: '-', icon: 'x' as const, action: () => {} },
         { label: '编辑', icon: 'pencil' as const, action: () => setEditing(t) },
+        { label: '创建副本', icon: 'copy' as const, action: () => duplicateTask(t) },
         { label: '打开详情', icon: 'terminal' as const, action: () => setDetailId(t.id) },
         { label: '-', icon: 'x' as const, action: () => {} },
         { label: '删除任务', icon: 'trash' as const, danger: true, action: () => deleteTask(t) },
@@ -296,8 +309,34 @@ export default function App() {
             <Icon name="folder" size={15} />
             打开数据文件夹
           </button>
+          <button
+            data-testid="menu-export"
+            onClick={() => {
+              setMenu(null)
+              window.tempo.exportTasks().then((r) => {
+                if (r.ok) toast(`已导出 ${r.count} 个任务`)
+                else if (!r.canceled) toast(r.error ?? '导出失败', 'err')
+              })
+            }}
+          >
+            <Icon name="download" size={15} />
+            导出全部任务
+          </button>
+          <button
+            data-testid="menu-import"
+            onClick={() => {
+              setMenu(null)
+              window.tempo.importTasks().then((r) => {
+                if (r.ok) toast(`已导入 ${r.count} 个任务`)
+                else if (!r.canceled) toast(r.error ?? '导入失败', 'err')
+              })
+            }}
+          >
+            <Icon name="upload" size={15} />
+            导入任务
+          </button>
           <div className="meta" id="app-meta">
-            Tempo for Windows · v0.1.0
+            Tempo for Windows · <span id="ver">v0.1.0</span>
             <br />
             调度在应用运行期间进行；错过补跑见任务设置
           </div>

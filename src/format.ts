@@ -66,6 +66,20 @@ export function fmtAt(ms: number | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
+/** 紧凑时间点：今天/明天 HH:MM，否则 M/D HH:MM（调度预览用） */
+export function fmtWhen(ms: number, now: number): string {
+  const d = new Date(ms)
+  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const today0 = new Date(now)
+  today0.setHours(0, 0, 0, 0)
+  const day0 = new Date(ms)
+  day0.setHours(0, 0, 0, 0)
+  const days = Math.round((day0.getTime() - today0.getTime()) / 86_400_000)
+  if (days === 0) return `今天 ${hhmm}`
+  if (days === 1) return `明天 ${hhmm}`
+  return `${d.getMonth() + 1}/${d.getDate()} ${hhmm}`
+}
+
 export const STATUS_LABEL: Record<RunStatus, string> = {
   running: '运行中',
   success: '成功',

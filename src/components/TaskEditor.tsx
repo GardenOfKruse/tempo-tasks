@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RunType, Task, TaskInput } from '../api'
 import { RUN_TYPE_FULL } from '../format'
 import { Icon } from '../icons'
-import { validateTaskInput } from '../../electron/schedule'
+import { validateTaskInput, previewNextRuns } from '../../electron/schedule'
+import { parseCron } from '../../electron/cron'
 import { isBashStyleMultiLine, toCmdCompat } from '../../electron/fixcmd'
+import { fmtWhen } from '../format'
 import { Sheet, Switch } from './common'
 
 const WEEK = [
@@ -263,6 +265,18 @@ export function TaskEditor({
     return { text: '应用未运行期间错过的调度，会在下次启动或系统唤醒时补跑一次', cls: '' }
   }, [f.kind, f.catchUp])
 
+  // Cron 实时预览：接下来 3 次执行时间（与调度器同一引擎计算）；非法表达式直接给出原因
+  const cronInfo = useMemo((): { times: string[]; error: string | null } => {
+    if (f.kind !== 'cron') return { times: [], error: null }
+    const parsed = parseCron(f.cronExpr)
+    if (!parsed.ok) return { times: [], error: parsed.error }
+    const now = Date.now()
+    return {
+      times: previewNextRuns({ kind: 'cron', expr: f.cronExpr }, now, 3).map((ms) => fmtWhen(ms, now)),
+      error: null,
+    }
+  }, [f.kind, f.cronExpr])
+
   return (
     <Sheet
       wide
@@ -440,15 +454,24 @@ export function TaskEditor({
               </>
             )}
             {f.kind === 'cron' && (
-              <div className="field-row">
-                <input
-                  className="field mono"
-                  placeholder="30 8 * * 1-5"
-                  value={f.cronExpr}
-                  spellCheck={false}
-                  onChange={(e) => set({ cronExpr: e.target.value })}
-                />
-              </div>
+              <>
+                <div className="field-row">
+                  <input
+                    className="field mono"
+                    placeholder="30 8 * * 1-5"
+                    value={f.cronExpr}
+                    spellCheck={false}
+                    onChange={(e) => set({ cronExpr: e.target.value })}
+                  />
+                </div>
+                <div className={`cron-preview${cronInfo.error ? ' error' : ''}`} data-testid="cron-preview">
+                  {cronInfo.error
+                    ? `表达式无效：${cronInfo.error}`
+                    : cronInfo.times.length > 0
+                      ? `接下来 ${cronInfo.times.length} 次：${cronInfo.times.join('、')}`
+                      : '该表达式在一年内没有匹配的执行时间'}
+                </div>
+              </>
             )}
             <div className={`form-hint ${scheduleHint.cls}`}>{scheduleHint.text}</div>
           </div>
