@@ -13,7 +13,7 @@
     "build:fast": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "tsc -p tsconfig.electron.json && node --test \"tests/*.test.mjs\"",
-    "test:all": "npm run test && npm run e2e && node tests/e2e/catchup.mjs && node tests/e2e/review.mjs && node tests/e2e/soak.mjs",
+    "test:all": "npm run test && npm run e2e && node tests/e2e/catchup.mjs && node tests/e2e/features.mjs && node tests/e2e/review.mjs && node tests/e2e/soak.mjs",
     "e2e": "node tests/e2e/run.mjs",
     "shot": "node scripts/screenshot.mjs",
     "dist": "electron-builder --win",
