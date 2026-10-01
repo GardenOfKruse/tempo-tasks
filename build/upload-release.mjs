@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import * as path from 'node:path'
-const cred = execSync('git -c http.proxy= -c https.proxy= credential fill', { input: 'protocol=https\nhost=github.com\n', encoding: 'utf-8' })
+const cred = execSync('git credential fill', { input: 'protocol=https\nhost=github.com\n', encoding: 'utf-8' })
 const token = cred.split('\n').find((l) => l.startsWith('password='))?.slice(9)
 const id = process.argv[2]
 const files = process.argv.slice(3)
