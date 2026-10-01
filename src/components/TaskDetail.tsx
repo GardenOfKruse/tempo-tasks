@@ -311,7 +311,18 @@ export function TaskDetail({
             <div key={r.id} className={`run-item${openRunId === r.id ? ' active' : ''}`}>
               <div
                 className="run-item-head"
+                role="button"
+                tabIndex={0}
+                aria-expanded={openRunId === r.id}
+                aria-label={`${fmtAt(r.startedAt)} ${STATUS_LABEL[r.status]}，展开或收起输出`}
                 onClick={() => setOpenRunId(openRunId === r.id ? null : r.id)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setOpenRunId(openRunId === r.id ? null : r.id)
+                  }
+                }}
               >
                 <RunIco status={r.status} />
                 <span className="when">{fmtAt(r.startedAt)}</span>

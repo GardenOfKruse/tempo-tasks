@@ -21,6 +21,13 @@ export function parseOnceAt(s: string): number | null {
   return dt.getTime()
 }
 
+/** 一次性计划的时刻是否已不可触发（与 nextRunAt 同口径：严格晚于 now 才会执行，含恰好等于 now）。
+ *  编辑器在用户选过去时间时即时提示，避免保存后卡片莫名出现「已错过」。 */
+export function isOnceAtPast(at: string, nowMs: number): boolean {
+  const at0 = parseOnceAt(at)
+  return at0 !== null && at0 <= nowMs
+}
+
 /** 严格晚于 afterMs 的下一次执行时间；null 表示不再执行 */
 export function nextRunAt(schedule: Schedule, afterMs: number): number | null {
   switch (schedule.kind) {

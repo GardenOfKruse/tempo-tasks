@@ -132,7 +132,7 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
 
       <div className="card-sched">
         <Icon name={t.schedule.kind === 'once' ? 'clock' : 'calendar'} size={13.5} />
-        <span>{formatSchedule(t.schedule)}</span>
+        <span title={formatSchedule(t.schedule)}>{formatSchedule(t.schedule)}</span>
       </div>
 
       <div className="card-sep" />

@@ -162,16 +162,23 @@ export default function App() {
 
   const editingRef = useRef(editing)
   editingRef.current = editing
+  // 详情/设置面板打开时，搜索框被遮罩盖住：Ctrl+F 聚焦它会变成往「隐形输入框」打字
+  const searchBlockedRef = useRef(false)
+  searchBlockedRef.current = detailId !== null || settingsOpen
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault()
         if (editingRef.current !== null) return // 已在编辑器中：不覆盖未保存草稿
+        // 编辑器在 JSX 中先于详情/设置渲染（同层级会被其遮罩盖住）：打开前先收起已有弹层
+        setDetailId(null)
+        setSettingsOpen(false)
         setEditing('new')
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         // 编辑器打开时 Ctrl+F 归编辑器内的查找替换（TaskEditor 里 preventDefault 并打开查找条）
         if (editingRef.current !== null) return
+        if (searchBlockedRef.current) return
         e.preventDefault()
         searchRef.current?.focus()
       }
@@ -385,7 +392,34 @@ export default function App() {
             <div className="hero-actions">
               <div className="search-box">
                 <Icon name="search" size={14} />
-                <input ref={searchRef} placeholder="搜索任务或命令" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input
+                  ref={searchRef}
+                  placeholder="搜索任务或命令"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Esc 先清空搜索词；已为空则交还焦点（无全局 Esc 行为，直接失焦即可）
+                    if (e.key === 'Escape') {
+                      if (query !== '') {
+                        e.preventDefault()
+                        setQuery('')
+                      } else e.currentTarget.blur()
+                    }
+                  }}
+                />
+                {query !== '' && (
+                  <button
+                    className="search-clear"
+                    aria-label="清除搜索"
+                    title="清除（Esc）"
+                    onClick={() => {
+                      setQuery('')
+                      searchRef.current?.focus()
+                    }}
+                  >
+                    <Icon name="close" size={11} />
+                  </button>
+                )}
               </div>
               <button className="btn icon-btn subtle" title="设置" data-testid="btn-settings" onClick={() => setSettingsOpen(true)}>
                 <Icon name="gear" size={16} />

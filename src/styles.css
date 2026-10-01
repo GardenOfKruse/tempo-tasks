@@ -300,6 +300,24 @@ button:focus-visible {
   color: var(--text-3);
 }
 
+/* 搜索词清除按钮（有输入时出现） */
+.search-clear {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.search-clear:hover {
+  background: var(--inset-strong);
+  color: var(--text);
+}
+
 /* 分段控件 */
 .seg {
   display: inline-flex;
@@ -635,6 +653,14 @@ textarea.field {
   gap: 6px;
   font-size: 12.5px;
   color: var(--text-2);
+}
+
+/* 长 Cron 表达式 / 多选星期时省略，悬停由 title 提示全文 */
+.card-sched > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-sched svg {
@@ -1357,6 +1383,12 @@ textarea.field {
 
 .run-item-head:hover {
   background: var(--card-hover);
+}
+
+/* 与卡片一致的键盘焦点圈（Tab 展开/收起输出） */
+.run-item-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .run-ico {

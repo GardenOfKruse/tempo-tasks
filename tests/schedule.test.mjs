@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { nextRunAt, parseHM, parseOnceAt, formatSchedule, validateTaskInput, validateSchedule, previewNextRuns, duplicateTaskInput } from '../dist-electron/schedule.js'
+import { nextRunAt, parseHM, parseOnceAt, formatSchedule, validateTaskInput, validateSchedule, previewNextRuns, duplicateTaskInput, isOnceAtPast } from '../dist-electron/schedule.js'
 
 const at = (y, mo, d, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi, 0, 0).getTime()
 const ymd = (ms) => {
@@ -181,4 +181,17 @@ test('duplicateTaskInput: 重复复制不叠加「副本」后缀；超长名截
   const dup = duplicateTaskInput(mkTask({ name: long }))
   assert.equal(dup.name.length <= 60, true)
   assert.ok(dup.name.endsWith('副本'))
+})
+
+test('isOnceAtPast: 过去/未来/恰好现在 与 nextRunAt 可触发口径一致', () => {
+  const t0 = at(2026, 9, 27, 10, 0)
+  assert.equal(isOnceAtPast(ymd(t0), at(2026, 9, 27, 11, 0)), true) // 已过去
+  assert.equal(isOnceAtPast(ymd(t0), at(2026, 9, 27, 9, 0)), false) // 仍可触发
+  // 恰好等于 now：nextRunAt 要求严格晚于 now，等于即不可触发 → 视为已过去
+  assert.equal(isOnceAtPast(ymd(t0), t0), true)
+})
+
+test('isOnceAtPast: 非法字符串不算过去（由校验负责报错）', () => {
+  assert.equal(isOnceAtPast('abc', at(2026, 9, 27, 10, 0)), false)
+  assert.equal(isOnceAtPast('2026-13-01T00:00', at(2026, 9, 27, 10, 0)), false)
 })

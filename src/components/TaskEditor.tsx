@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunType, Task, TaskInput } from '../api'
 import { RUN_TYPE_FULL } from '../format'
 import { Icon } from '../icons'
-import { validateTaskInput, previewNextRuns } from '../../electron/schedule'
+import { validateTaskInput, previewNextRuns, isOnceAtPast } from '../../electron/schedule'
 import { parseCron } from '../../electron/cron'
 import { isBashStyleMultiLine, toCmdCompat } from '../../electron/fixcmd'
 import { fmtWhen } from '../format'
@@ -645,13 +645,20 @@ export function TaskEditor({
 
           <div className="sched-panel" data-testid="sched-panel">
             {f.kind === 'once' && (
-              <input
-                type="datetime-local"
-                className="field"
-                style={{ width: 220 }}
-                value={f.onceAt}
-                onChange={(e) => set({ onceAt: e.target.value })}
-              />
+              <>
+                <input
+                  type="datetime-local"
+                  className="field"
+                  style={{ width: 220 }}
+                  value={f.onceAt}
+                  onChange={(e) => set({ onceAt: e.target.value })}
+                />
+                {isOnceAtPast(f.onceAt, Date.now()) && (
+                  <div className="form-hint warn" data-testid="once-stale">
+                    所选时刻已过去：保存后任务会立即标记为「已错过」，不会自动补跑
+                  </div>
+                )}
+              </>
             )}
             {f.kind === 'interval' && (
               <div className="field-row">

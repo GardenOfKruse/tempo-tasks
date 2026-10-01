@@ -119,25 +119,16 @@ export function SettingsSheet({
             <Switch on={settings.autoStart === true} onChange={toggleAutoStart} testid="settings-autostart" />
           </div>
           <div className="set-row">
-            <span>运行日志落盘</span>
-            <div className="seg" data-testid="settings-runlogs">
-              {(
-                [
-                  [false, '关闭'],
-                  [true, '开启'],
-                ] as [boolean, string][]
-              ).map(([k, label]) => (
-                <button
-                  key={String(k)}
-                  className={(settings.writeRunLogs === true) === k ? 'on' : ''}
-                  onClick={() => onPatch({ writeRunLogs: k }, k ? '每次运行的输出将另存为独立文本文件' : '不再把运行日志写入磁盘')}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="set-row-txt">
+              <div>运行日志落盘</div>
+              <div className="set-row-desc">每次运行的输出另存为文本文件，可在任务详情页「输出目录」打开；每任务保留最近 100 次</div>
             </div>
+            <Switch
+              on={settings.writeRunLogs === true}
+              onChange={(v) => onPatch({ writeRunLogs: v }, v ? '每次运行的输出将另存为独立文本文件' : '不再把运行日志写入磁盘')}
+              testid="settings-runlogs"
+            />
           </div>
-          <div className="set-note">开启后，每次运行的输出写入数据目录 runs/&#60;任务&#62;/ 下的文本文件，可在任务详情页点「输出目录」打开；每任务保留最近 100 次</div>
         </div>
       </div>
 
