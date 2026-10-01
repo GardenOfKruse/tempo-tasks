@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RunRecord, Settings, Task } from './api'
+import type { RunRecord, Settings, Task, TaskInput } from './api'
 import { Icon } from './icons'
 import { TaskCard } from './components/TaskCard'
 import { TaskEditor } from './components/TaskEditor'
@@ -7,6 +7,7 @@ import { TaskDetail } from './components/TaskDetail'
 import { ConfirmBox, PopMenu, Toasts, type MenuItem, type ToastItem } from './components/common'
 import { SettingsSheet } from './components/SettingsSheet'
 import { duplicateTaskInput } from '../electron/schedule'
+import { STARTER_TEMPLATES, type StarterTemplate } from '../electron/templates'
 import { displayClock, isFailStatus } from '../electron/runs'
 
 type Filter = 'all' | 'running' | 'paused' | 'failed' | 'missed'
@@ -18,6 +19,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({ theme: 'system', sortMode: 'created', minimizeToTray: false })
   const [now, setNow] = useState(() => Date.now())
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
+  /** 从模板新建时带入编辑器的预填配置（普通新建/编辑为 null） */
+  const [draftInput, setDraftInput] = useState<TaskInput | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null)
   const [runningIds, setRunningIds] = useState<Map<string, Set<string>>>(new Map())
@@ -220,7 +223,25 @@ export default function App() {
     return sorted
   }, [tasks, query, filter, runningIds, isRunning, lastRuns, settings.sortMode])
 
-  const detailTask = tasks?.find((t) => t.id === detailId) ?? null
+  // 详情目标任务：避免随秒级时钟在每次渲染都做 O(n) 查找
+  const detailTask = useMemo(() => tasks?.find((t) => t.id === detailId) ?? null, [tasks, detailId])
+
+  /* ---------- 打开编辑器 ---------- */
+
+  const openNew = useCallback(() => {
+    setDraftInput(null)
+    setEditing('new')
+  }, [])
+
+  const startFromTemplate = useCallback((tpl: StarterTemplate) => {
+    setDraftInput(structuredClone(tpl.input))
+    setEditing('new')
+  }, [])
+
+  const closeEditor = useCallback(() => {
+    setEditing(null)
+    setDraftInput(null)
+  }, [])
 
   /* ---------- 操作（全部稳定引用，配合 TaskCard 的 React.memo） ---------- */
 
@@ -321,7 +342,7 @@ export default function App() {
   useEffect(() => {
     if (!tasks) return
     const ui = new URLSearchParams(window.location.search).get('ui')
-    if (ui === 'editor') setEditing('new')
+    if (ui === 'editor') openNew()
     if (ui === 'detail' && tasks.length > 0) setDetailId(sortedFirstId(tasks))
     if (ui === 'settings') setSettingsOpen(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -360,7 +381,7 @@ export default function App() {
               <button className="btn icon-btn subtle" title="设置" data-testid="btn-settings" onClick={() => setSettingsOpen(true)}>
                 <Icon name="gear" size={16} />
               </button>
-              <button className="btn primary" onClick={() => setEditing('new')} data-testid="btn-new">
+              <button className="btn primary" onClick={openNew} data-testid="btn-new">
                 <Icon name="plus" size={15} />
                 新建任务
               </button>
@@ -388,7 +409,7 @@ export default function App() {
 
           {tasks === null ? null : visibleTasks.length === 0 ? (
             tasks.length === 0 ? (
-              <EmptyState onNew={() => setEditing('new')} />
+              <EmptyState onNew={openNew} onTemplate={startFromTemplate} />
             ) : (
               <div className="empty" style={{ paddingTop: 60 }}>
                 <p style={{ marginTop: 0, color: 'var(--text-2)' }}>没有匹配「{query || filterLabel(filter)}」的任务</p>
@@ -415,6 +436,7 @@ export default function App() {
                     running={running}
                     liveStartedAt={liveRuns[t.id]?.startedAt}
                     lastRun={lastRuns[t.id] ?? null}
+                    query={query.trim()}
                     onOpen={setDetailId}
                     onRun={runNow}
                     onStop={stopRun}
@@ -433,16 +455,17 @@ export default function App() {
       {editing !== null && (
         <TaskEditor
           task={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          initial={draftInput}
+          onClose={closeEditor}
           onSaved={(msg) => {
-            setEditing(null)
+            closeEditor()
             toast(msg)
           }}
           onDelete={
             editing !== 'new'
               ? () => {
                   const t = editing as Task
-                  setEditing(null)
+                  closeEditor()
                   deleteTask(t)
                 }
               : undefined
@@ -503,7 +526,7 @@ function sortedFirstId(tasks: Task[]): string {
   return [...tasks].sort((a, b) => b.createdAt - a.createdAt)[0].id
 }
 
-function EmptyState({ onNew }: { onNew: () => void }) {
+function EmptyState({ onNew, onTemplate }: { onNew: () => void; onTemplate: (tpl: StarterTemplate) => void }) {
   return (
     <div className="empty" data-testid="empty-state">
       <div className="art">
@@ -517,6 +540,15 @@ function EmptyState({ onNew }: { onNew: () => void }) {
         <Icon name="plus" size={15} />
         新建任务
       </button>
+      <div className="tpl-cap">或从一个模板开始，进编辑器后可随意修改</div>
+      <div className="tpl-row">
+        {STARTER_TEMPLATES.map((tpl) => (
+          <button key={tpl.key} className="tpl-card" data-testid={`tpl-${tpl.key}`} onClick={() => onTemplate(tpl)}>
+            <span className="tpl-title">{tpl.title}</span>
+            <span className="tpl-desc">{tpl.desc}</span>
+          </button>
+        ))}
+      </div>
       <div className="hint">
         按 <kbd>Ctrl</kbd> + <kbd>N</kbd> 随时新建 · 调度在应用运行期间进行
       </div>

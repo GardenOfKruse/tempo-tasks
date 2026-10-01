@@ -8,6 +8,7 @@ import { Scheduler } from './scheduler'
 import { validateTaskInput } from './schedule'
 import { buildExport, parseImport } from './transfer'
 import { resolveCloseBehavior, trayActions, TRAY_TOOLTIP } from './tray'
+import { RUNS_LOG_DIR, buildRunLog, pruneRunLogFiles, runLogFileName } from './runlog'
 import type { RunRecord, Settings, Task, TaskInput, TriggerKind } from './types'
 import { newId } from './types'
 
@@ -47,9 +48,11 @@ function broadcastRun(record: RunRecord, force = false): void {
   mainWindow?.webContents.send('tempo:run-update', record)
   if (record.endedAt !== null) {
     // 任务可能已在运行期间被删除：不落盘孤儿记录、不打扰
-    if (!store.snapshot.tasks.some((t) => t.id === record.taskId)) return
+    const task = store.snapshot.tasks.find((t) => t.id === record.taskId)
+    if (!task) return
     store.appendRun(record)
     maybeNotify(record)
+    maybeWriteRunLog(record, task)
   }
 }
 
@@ -70,6 +73,26 @@ function maybeNotify(record: RunRecord): void {
     mainWindow?.webContents.send('tempo:open-task', task.id)
   })
   n.show()
+}
+
+/** 可选：运行结束后把输出落盘为独立文本文件（设置 writeRunLogs，数据透明）。
+ *  失败只记日志不打扰；每次写入后按保留策略清理最旧文件。 */
+function maybeWriteRunLog(record: RunRecord, task: Task): void {
+  if (store.snapshot.settings.writeRunLogs !== true) return
+  try {
+    const dir = path.join(dataDir, RUNS_LOG_DIR, task.id)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, runLogFileName(record.startedAt, record.id)), buildRunLog(record, task.name), 'utf-8')
+    for (const stale of pruneRunLogFiles(fs.readdirSync(dir))) {
+      try {
+        fs.unlinkSync(path.join(dir, stale))
+      } catch {
+        /* 单个旧文件删除失败不阻塞（可能被占用，下次运行再试） */
+      }
+    }
+  } catch (e) {
+    console.error('[runlog] write failed:', e instanceof Error ? e.message : String(e))
+  }
 }
 
 function formatDur(ms: number): string {
@@ -317,6 +340,19 @@ function registerIpc(): void {
   }))
   ipcMain.handle('app:openDataDir', () => {
     spawn('explorer.exe', [dataDir], { detached: true, stdio: 'ignore' }).unref?.()
+  })
+  ipcMain.handle('app:openRunsDir', (_e, taskId?: string) => {
+    // taskId 白名单校验（id 字符集），避免路径拼接被构造
+    const dir =
+      typeof taskId === 'string' && /^[A-Za-z0-9_-]+$/.test(taskId)
+        ? path.join(dataDir, RUNS_LOG_DIR, taskId)
+        : path.join(dataDir, RUNS_LOG_DIR)
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+    } catch {
+      /* 目录创建失败时仍尝试打开父级 */
+    }
+    spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore' }).unref?.()
   })
   ipcMain.handle('app:chooseFolder', async () => {
     if (!mainWindow) return null

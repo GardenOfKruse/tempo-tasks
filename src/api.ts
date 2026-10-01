@@ -20,6 +20,7 @@ interface TempoApi {
   setSettings(patch: Partial<Settings>): Promise<Settings>
   appInfo(): Promise<{ version: string; dataDir: string; electron: string; readyMs: number | null }>
   openDataDir(): Promise<void>
+  openRunsDir(taskId?: string): Promise<void>
   chooseFolder(): Promise<string | null>
   probePython(): Promise<{ ok: boolean; version?: string; error?: string }>
   onTasksChanged(cb: (tasks: Task[]) => void): () => void

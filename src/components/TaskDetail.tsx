@@ -112,8 +112,10 @@ export function TaskDetail({
 
   const shown = useMemo(() => (runFilter === 'all' ? merged : merged.filter((r) => matchRunFilter(r, runFilter))), [merged, runFilter])
 
-  // 近 7 天统计：与历史列表同源（含运行中的直播条目），随秒级 now 滚动窗口
-  const summary = useMemo(() => summarizeRuns(merged, now - 7 * 86_400_000), [merged, now])
+  // 近 7 天统计：与历史列表同源（含运行中的直播条目）。
+  // 统计项不含秒级内容，按分钟桶重算即可（原实现随秒级 now 每秒重算 O(n)）。
+  const minuteClock = Math.floor(now / 60_000)
+  const summary = useMemo(() => summarizeRuns(merged, minuteClock * 60_000 - 7 * 86_400_000), [merged, minuteClock])
 
   const clearHistory = async () => {
     const r = await window.tempo.clearRuns(task.id)
@@ -245,9 +247,18 @@ export function TaskDetail({
       <div className="sect-title">
         执行历史
         <span className="count-pill">{merged.length > 0 ? `${shown.length === merged.length ? `${merged.length} 条记录` : `${shown.length} / ${merged.length} 条`}` : ''}</span>
+        <span className="grow" />
+        <button
+          className="tclear dir"
+          title="打开输出日志所在文件夹（数据目录 runs/<任务>；需在设置中开启「运行日志落盘」，首次打开会自动创建）"
+          data-testid="open-runs-dir"
+          onClick={() => window.tempo.openRunsDir(task.id)}
+        >
+          <Icon name="folder" size={12} />
+          输出目录
+        </button>
         {merged.length > 0 && (
           <>
-            <span className="grow" />
             <div className="chip-row detail-chips">
               {(
                 [

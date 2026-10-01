@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RunType, Task, TaskInput } from '../api'
 import { RUN_TYPE_FULL } from '../format'
 import { Icon } from '../icons'
@@ -6,7 +6,7 @@ import { validateTaskInput, previewNextRuns } from '../../electron/schedule'
 import { parseCron } from '../../electron/cron'
 import { isBashStyleMultiLine, toCmdCompat } from '../../electron/fixcmd'
 import { fmtWhen } from '../format'
-import { Sheet, Switch } from './common'
+import { Sheet, Switch, ConfirmBox } from './common'
 
 const WEEK = [
   { d: 0, label: '日' },
@@ -63,46 +63,69 @@ interface FormState {
   concurrency: 'skip' | 'parallel'
 }
 
-function formFromTask(t: Task | null): FormState {
-  if (!t) {
+function formFromTask(t: Task | null, initial?: TaskInput | null): FormState {
+  if (t) {
+    const s = t.schedule
     return {
-      name: '',
-      runType: 'cmd',
-      command: '',
-      cwd: '',
-      timeoutSec: '60',
-      kind: 'daily',
-      onceAt: localDateTimeInput(null),
-      intervalValue: '15',
-      intervalUnit: 'm',
-      dailyTime: '08:30',
-      weeklyDays: [1],
-      weeklyTime: '09:00',
-      cronExpr: '*/5 * * * *',
-      catchUp: true,
-      notify: false,
-      concurrency: 'skip',
+      name: t.name,
+      runType: t.runType,
+      command: t.command,
+      cwd: t.cwd,
+      timeoutSec: String(t.timeoutSec),
+      kind: s.kind,
+      onceAt: s.kind === 'once' ? s.at : localDateTimeInput(null),
+      intervalValue: s.kind === 'interval' ? decomposeSeconds(s.seconds).value : '15',
+      intervalUnit: s.kind === 'interval' ? decomposeSeconds(s.seconds).unit : 'm',
+      dailyTime: s.kind === 'daily' ? s.time : '08:30',
+      weeklyDays: s.kind === 'weekly' ? s.days : [1],
+      weeklyTime: s.kind === 'weekly' ? s.time : '09:00',
+      cronExpr: s.kind === 'cron' ? s.expr : '*/5 * * * *',
+      catchUp: t.catchUp,
+      notify: t.notify,
+      concurrency: t.concurrency,
     }
   }
-  const s = t.schedule
-  return {
-    name: t.name,
-    runType: t.runType,
-    command: t.command,
-    cwd: t.cwd,
-    timeoutSec: String(t.timeoutSec),
-    kind: s.kind,
-    onceAt: s.kind === 'once' ? s.at : localDateTimeInput(null),
-    intervalValue: s.kind === 'interval' ? decomposeSeconds(s.seconds).value : '15',
-    intervalUnit: s.kind === 'interval' ? decomposeSeconds(s.seconds).unit : 'm',
-    dailyTime: s.kind === 'daily' ? s.time : '08:30',
-    weeklyDays: s.kind === 'weekly' ? s.days : [1],
-    weeklyTime: s.kind === 'weekly' ? s.time : '09:00',
-    cronExpr: s.kind === 'cron' ? s.expr : '*/5 * * * *',
-    catchUp: t.catchUp,
-    notify: t.notify,
-    concurrency: t.concurrency,
+  const f: FormState = {
+    name: '',
+    runType: 'cmd',
+    command: '',
+    cwd: '',
+    timeoutSec: '60',
+    kind: 'daily',
+    onceAt: localDateTimeInput(null),
+    intervalValue: '15',
+    intervalUnit: 'm',
+    dailyTime: '08:30',
+    weeklyDays: [1],
+    weeklyTime: '09:00',
+    cronExpr: '*/5 * * * *',
+    catchUp: true,
+    notify: false,
+    concurrency: 'skip',
   }
+  // 模板快速开始：以默认表单为底，覆盖模板给出的字段
+  if (initial) {
+    if (initial.name) f.name = initial.name
+    f.runType = initial.runType
+    if (initial.command) f.command = initial.command
+    if (initial.cwd) f.cwd = initial.cwd
+    if (initial.timeoutSec !== undefined) f.timeoutSec = String(initial.timeoutSec)
+    const s = initial.schedule
+    f.kind = s.kind
+    if (s.kind === 'once') f.onceAt = s.at
+    if (s.kind === 'interval') {
+      const d = decomposeSeconds(s.seconds)
+      f.intervalValue = d.value
+      f.intervalUnit = d.unit
+    }
+    if (s.kind === 'daily') f.dailyTime = s.time
+    if (s.kind === 'weekly') {
+      f.weeklyDays = s.days
+      f.weeklyTime = s.time
+    }
+    if (s.kind === 'cron') f.cronExpr = s.expr
+  }
+  return f
 }
 
 /* ---------- 代码编辑区：行号 + Tab 缩进 + 横向滚动 ---------- */
@@ -163,19 +186,31 @@ function CodeArea({ value, onChange, placeholder, testid }: { value: string; onC
 
 export function TaskEditor({
   task,
+  initial,
   onClose,
   onSaved,
   onDelete,
 }: {
   task: Task | null
+  /** 模板快速开始的预填配置（仅在 task 为 null 时生效） */
+  initial?: TaskInput | null
   onClose: () => void
   onSaved: (msg: string) => void
   onDelete?: () => void
 }) {
-  const [f, setF] = useState<FormState>(() => formFromTask(task))
+  const [initialForm] = useState(() => formFromTask(task, initial))
+  const [f, setF] = useState<FormState>(initialForm)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [pyInfo, setPyInfo] = useState<'checking' | 'ok' | 'missing' | null>(null)
+
+  // 有未保存修改时关闭需确认（Esc / 取消 / 遮罩 / 右上角 X 都走 requestClose）
+  const dirty = JSON.stringify(f) !== JSON.stringify(initialForm)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const requestClose = useCallback(() => {
+    if (dirty) setConfirmDiscard(true)
+    else onClose()
+  }, [dirty, onClose])
 
   const set = (patch: Partial<FormState>) => setF((prev) => ({ ...prev, ...patch }))
 
@@ -234,6 +269,7 @@ export function TaskEditor({
   }
 
   const save = async () => {
+    if (saving) return
     const v = validateTaskInput(buildInput())
     if (!v.ok) {
       setError(v.error)
@@ -248,6 +284,20 @@ export function TaskEditor({
     }
     onSaved(task ? '已保存修改' : '任务已创建')
   }
+
+  // Ctrl+S 保存：编辑器挂载期间的全局快捷键（含焦点在代码编辑区内），经 ref 取最新闭包
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        saveRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const chooseFolder = async () => {
     const dir = await window.tempo.chooseFolder()
@@ -292,7 +342,7 @@ export function TaskEditor({
     <Sheet
       wide
       title={task ? '编辑任务' : '新建任务'}
-      onClose={onClose}
+      onClose={requestClose}
       testid="task-editor"
       className="editor-sheet"
       footer={
@@ -309,10 +359,10 @@ export function TaskEditor({
               {error}
             </span>
           )}
-          <button className="btn" onClick={onClose}>
+          <button className="btn" onClick={requestClose}>
             取消
           </button>
-          <button className="btn primary" onClick={save} disabled={saving} data-testid="editor-save">
+          <button className="btn primary" onClick={save} disabled={saving} data-testid="editor-save" title="Ctrl+S">
             {saving ? '保存中…' : task ? '保存' : '创建任务'}
           </button>
         </>
@@ -560,6 +610,16 @@ export function TaskEditor({
           </div>
         </div>
       </div>
+
+      {confirmDiscard && (
+        <ConfirmBox
+          title="放弃未保存的修改？"
+          message="编辑器中有尚未保存的修改，关闭后将无法恢复。"
+          confirmLabel="放弃修改"
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={onClose}
+        />
+      )}
     </Sheet>
   )
 }

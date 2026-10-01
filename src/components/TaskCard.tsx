@@ -3,6 +3,7 @@ import type { RunRecord, Task } from '../api'
 import { RUN_TYPE_LABEL, fmtCountdown, fmtDur, fmtRel } from '../format'
 import { Icon } from '../icons'
 import { formatSchedule } from '../../electron/schedule'
+import { splitHighlight } from '../../electron/highlight'
 
 export interface TaskCardProps {
   task: Task
@@ -11,6 +12,8 @@ export interface TaskCardProps {
   running: boolean
   liveStartedAt: number | undefined
   lastRun: RunRecord | null
+  /** 当前搜索词（已 trim）：任务名/命令命中处高亮；空串不高亮 */
+  query?: string
   onOpen: (id: string) => void
   onRun: (id: string) => void
   onStop: (id: string) => void
@@ -20,8 +23,21 @@ export interface TaskCardProps {
   onMenu: (t: Task, x: number, y: number) => void
 }
 
+/** 命中高亮文本：q 为空时原样输出，保持 textContent 与无搜索时一致 */
+function Hi({ text, q }: { text: string; q: string }) {
+  if (q === '') return <>{text}</>
+  return (
+    <>
+      {splitHighlight(text, q).map((p, i) =>
+        p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>,
+      )}
+    </>
+  )
+}
+
 export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
   const t = p.task
+  const q = p.query ?? ''
   const idx = Math.min(t.createdAt % 12, 11) // 入场动画的微差异
   const last = p.lastRun
   const lastChip = p.running
@@ -56,7 +72,7 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
       <div className="card-top">
         <span className={`status-dot ${dotCls}`} />
         <span className="card-name" title={t.name}>
-          {t.name}
+          <Hi text={t.name} q={q} />
         </span>
         {t.pinned && <Icon name="pin" size={12.5} className="pin-badge" />}
         {!t.enabled && <span className="miss-badge">已暂停</span>}
@@ -76,7 +92,7 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
       <div className="card-cmd">
         <span className={`type-badge ${t.runType}`}>{RUN_TYPE_LABEL[t.runType]}</span>
         <span className="cmd mono" title={t.command}>
-          {t.command}
+          <Hi text={t.command} q={q} />
         </span>
       </div>
 

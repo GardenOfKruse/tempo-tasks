@@ -44,6 +44,11 @@ try {
   const err = await win.locator('[data-testid="editor-error"]').textContent().catch(() => '')
   check('无效 cron 保存被拦截并提示', (err ?? '').includes('Cron'), err ?? 'no-error-shown')
   await win.keyboard.press('Escape')
+  // 编辑器有未保存修改：关闭应弹出「放弃修改」确认（v0.8 状态可信）
+  await win.waitForSelector('.confirm-box')
+  check('未保存修改关闭需确认', true)
+  await win.click('.confirm-box .btn.destructive')
+  await win.waitForSelector('[data-testid="task-editor"]', { state: 'detached' })
 
   // 3. 搜索过滤
   await win.fill('.search-box input', '时钟')

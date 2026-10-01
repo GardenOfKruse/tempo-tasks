@@ -27,6 +27,7 @@ const api = {
   setSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:set', patch),
   appInfo: () => ipcRenderer.invoke('app:info'),
   openDataDir: () => ipcRenderer.invoke('app:openDataDir'),
+  openRunsDir: (taskId?: string) => ipcRenderer.invoke('app:openRunsDir', taskId),
   chooseFolder: (): Promise<string | null> => ipcRenderer.invoke('app:chooseFolder'),
   probePython: () => ipcRenderer.invoke('app:probePython'),
   onTasksChanged: (cb: (tasks: Task[]) => void) => subscribe<[Task[]]>('tempo:tasks-changed', cb),

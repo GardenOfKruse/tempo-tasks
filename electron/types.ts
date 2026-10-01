@@ -66,6 +66,7 @@ export interface Settings {
   sortMode: 'created' | 'name' | 'next'
   minimizeToTray: boolean // 关窗最小化到托盘（默认关：关窗即退出）
   trayHintShown?: boolean // 首次隐藏到托盘时已提示过（旧数据无此字段）
+  writeRunLogs?: boolean // 每次运行输出落盘为独立文本文件（默认关，数据透明可选项）
 }
 
 export const MAX_RUNS_PER_TASK = 50
