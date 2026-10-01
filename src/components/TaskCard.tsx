@@ -35,6 +35,26 @@ function Hi({ text, q }: { text: string; q: string }) {
   )
 }
 
+/** 网格方向键导航：可见卡片序列内左右移动一格，上下按首行列数换行移动 */
+function focusSiblingCard(current: HTMLElement, key: string): void {
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="task-card"]'))
+  const idx = cards.indexOf(current)
+  if (idx === -1) return
+  let target = idx
+  if (key === 'ArrowRight') target = idx + 1
+  else if (key === 'ArrowLeft') target = idx - 1
+  else {
+    const top = cards[0]?.offsetTop ?? 0
+    let cols = 1
+    for (let i = 1; i < cards.length; i++) {
+      if (cards[i].offsetTop !== top) break
+      cols++
+    }
+    target = key === 'ArrowDown' ? idx + cols : idx - cols
+  }
+  if (target >= 0 && target < cards.length && target !== idx) cards[target].focus()
+}
+
 export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
   const t = p.task
   const q = p.query ?? ''
@@ -62,7 +82,21 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
       style={{ animationDelay: `${idx * 26}ms` }}
       data-testid="task-card"
       data-task-name={t.name}
+      role="button"
+      tabIndex={0}
+      aria-label={`任务 ${t.name}，打开详情`}
       onClick={() => p.onOpen(t.id)}
+      onKeyDown={(e) => {
+        // 仅卡片本身获得焦点时响应；内部按钮的键盘操作不劫持
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          p.onOpen(t.id)
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          focusSiblingCard(e.currentTarget, e.key)
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         p.onMenu(t, e.clientX, e.clientY)

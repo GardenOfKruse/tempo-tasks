@@ -7,6 +7,7 @@ import { parseCron } from '../../electron/cron'
 import { isBashStyleMultiLine, toCmdCompat } from '../../electron/fixcmd'
 import { fmtWhen } from '../format'
 import { Sheet, Switch, ConfirmBox } from './common'
+import { applyDraft, clearDraft, loadDraft, saveDraft, type DraftForm } from '../draft'
 
 const WEEK = [
   { d: 0, label: '日' },
@@ -44,24 +45,8 @@ function decomposeSeconds(seconds: number): { value: string; unit: IntervalUnit 
   return { value: String(seconds), unit: 's' }
 }
 
-interface FormState {
-  name: string
-  runType: RunType
-  command: string
-  cwd: string
-  timeoutSec: string
-  kind: ScheduleKind
-  onceAt: string
-  intervalValue: string
-  intervalUnit: IntervalUnit
-  dailyTime: string
-  weeklyDays: number[]
-  weeklyTime: string
-  cronExpr: string
-  catchUp: boolean
-  notify: boolean
-  concurrency: 'skip' | 'parallel'
-}
+/** 表单状态与草稿同形（src/draft.ts 负责localStorage 读写与字段校验） */
+type FormState = DraftForm
 
 function formFromTask(t: Task | null, initial?: TaskInput | null): FormState {
   if (t) {
@@ -128,12 +113,132 @@ function formFromTask(t: Task | null, initial?: TaskInput | null): FormState {
   return f
 }
 
-/* ---------- 代码编辑区：行号 + Tab 缩进 + 横向滚动 ---------- */
+/* ---------- 代码编辑区：行号 + Tab 缩进 + 横向滚动 + 查找替换 ---------- */
 
-function CodeArea({ value, onChange, placeholder, testid }: { value: string; onChange: (v: string) => void; placeholder: string; testid?: string }) {
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const FIND_MATCH_CAP = 2000
+
+function CodeArea({
+  value,
+  onChange,
+  placeholder,
+  testid,
+  findOpen,
+  onFindToggle,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  testid?: string
+  findOpen: boolean
+  onFindToggle: (open: boolean) => void
+}) {
   const taRef = useRef<HTMLTextAreaElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
+  const findRef = useRef<HTMLInputElement>(null)
+  const [findText, setFindText] = useState('')
+  const [replaceText, setReplaceText] = useState('')
+  const [matchIdx, setMatchIdx] = useState(0)
   const lineCount = useMemo(() => Math.max(value.split('\n').length, 1), [value])
+  // 智能大小写：查询含大写时精确匹配，全小写则忽略大小写
+  const caseSensitive = /[A-Z]/.test(findText)
+
+  const matches = useMemo(() => {
+    if (findText === '') return []
+    const hay = caseSensitive ? value : value.toLowerCase()
+    const needle = caseSensitive ? findText : findText.toLowerCase()
+    const out: number[] = []
+    let i = hay.indexOf(needle)
+    while (i !== -1 && out.length < FIND_MATCH_CAP) {
+      out.push(i)
+      i = hay.indexOf(needle, i + Math.max(needle.length, 1))
+    }
+    return out
+  }, [value, findText, caseSensitive])
+
+  useEffect(() => {
+    if (matchIdx >= matches.length) setMatchIdx(matches.length === 0 ? 0 : matches.length - 1)
+  }, [matches.length, matchIdx])
+
+  /** 定位到第 i 处；focus=false 时只设置选区不打断查找框输入 */
+  const selectMatch = useCallback(
+    (i: number, focus: boolean) => {
+      const ta = taRef.current
+      const pos = matches[i]
+      if (!ta || pos === undefined) return
+      if (focus) ta.focus()
+      ta.setSelectionRange(pos, pos + findText.length)
+    },
+    [matches, findText.length],
+  )
+
+  const step = useCallback(
+    (dir: 1 | -1) => {
+      if (matches.length === 0) return
+      const next = (matchIdx + dir + matches.length) % matches.length
+      setMatchIdx(next)
+      selectMatch(next, true)
+    },
+    [matches.length, matchIdx, selectMatch],
+  )
+
+  // 打开时聚焦查找框，并尽量以编辑区当前选区作为查找词
+  useEffect(() => {
+    if (!findOpen) return
+    const ta = taRef.current
+    if (ta && ta.selectionStart !== ta.selectionEnd) {
+      const sel = value.slice(ta.selectionStart, ta.selectionEnd)
+      if (sel !== '' && !sel.includes('\n')) setFindText(sel)
+    }
+    findRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findOpen])
+
+  // 关闭时把焦点还给编辑区（打开瞬间不算）
+  const prevOpen = useRef(findOpen)
+  useEffect(() => {
+    if (prevOpen.current && !findOpen) taRef.current?.focus()
+    prevOpen.current = findOpen
+  }, [findOpen])
+
+  // 查询变化时优先选中光标之后的第一处
+  useEffect(() => {
+    if (findText === '' || matches.length === 0) return
+    const caret = taRef.current?.selectionStart ?? 0
+    const i = matches.findIndex((p) => p >= caret)
+    const idx = i === -1 ? 0 : i
+    setMatchIdx(idx)
+    selectMatch(idx, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findText])
+
+  const replaceCurrent = () => {
+    const ta = taRef.current
+    const pos = matches[matchIdx]
+    if (!ta || pos === undefined) return
+    if (ta.selectionStart === pos && ta.selectionEnd === pos + findText.length) {
+      ta.focus()
+      // execCommand 走原生编辑命令，保留 Ctrl+Z 撤销栈
+      if (!document.execCommand('insertText', false, replaceText)) {
+        onChange(value.slice(0, pos) + replaceText + value.slice(pos + findText.length))
+      }
+    } else {
+      selectMatch(matchIdx, true)
+    }
+  }
+
+  const replaceAll = () => {
+    const ta = taRef.current
+    if (!ta || matches.length === 0) return
+    const re = new RegExp(escapeRegExp(findText), caseSensitive ? 'g' : 'gi')
+    const nv = value.replace(re, replaceText)
+    ta.focus()
+    ta.setSelectionRange(0, value.length)
+    if (!document.execCommand('insertText', false, nv)) onChange(nv)
+  }
 
   const syncScroll = () => {
     if (gutterRef.current && taRef.current) gutterRef.current.scrollTop = taRef.current.scrollTop
@@ -162,24 +267,72 @@ function CodeArea({ value, onChange, placeholder, testid }: { value: string; onC
 
   return (
     <div className="code-area" data-testid={testid}>
-      <div className="code-gutter" ref={gutterRef} aria-hidden="true">
-        {Array.from({ length: lineCount }, (_, i) => (
-          <div key={i} className="code-ln">
-            {i + 1}
-          </div>
-        ))}
+      {findOpen && (
+        <div className="find-bar" data-testid="find-bar">
+          <input
+            ref={findRef}
+            className="find-input mono"
+            placeholder="查找"
+            spellCheck={false}
+            value={findText}
+            onChange={(e) => {
+              setFindText(e.target.value)
+              setMatchIdx(0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                step(e.shiftKey ? -1 : 1)
+              }
+            }}
+          />
+          <span className={`find-count${findText !== '' && matches.length === 0 ? ' none' : ''}`} data-testid="find-count">
+            {findText === '' ? '' : matches.length === 0 ? '无结果' : `${matchIdx + 1}/${matches.length}`}
+          </span>
+          <button title="上一处（Shift+Enter）" onClick={() => step(-1)} disabled={matches.length === 0}>
+            ↑
+          </button>
+          <button title="下一处（Enter）" onClick={() => step(1)} disabled={matches.length === 0}>
+            ↓
+          </button>
+          <input
+            className="find-input mono"
+            placeholder="替换为"
+            spellCheck={false}
+            value={replaceText}
+            onChange={(e) => setReplaceText(e.target.value)}
+          />
+          <button onClick={replaceCurrent} disabled={matches.length === 0} title="替换当前处">
+            替换
+          </button>
+          <button onClick={replaceAll} disabled={matches.length === 0} title="替换全部">
+            全部
+          </button>
+          <button title="关闭（Esc）" onClick={() => onFindToggle(false)}>
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
+      <div className="code-main">
+        <div className="code-gutter" ref={gutterRef} aria-hidden="true">
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i} className="code-ln">
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        <textarea
+          ref={taRef}
+          className="code-input mono"
+          value={value}
+          placeholder={placeholder}
+          spellCheck={false}
+          wrap="off"
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={syncScroll}
+          onKeyDown={handleKeyDown}
+        />
       </div>
-      <textarea
-        ref={taRef}
-        className="code-input mono"
-        value={value}
-        placeholder={placeholder}
-        spellCheck={false}
-        wrap="off"
-        onChange={(e) => onChange(e.target.value)}
-        onScroll={syncScroll}
-        onKeyDown={handleKeyDown}
-      />
     </div>
   )
 }
@@ -198,11 +351,36 @@ export function TaskEditor({
   onSaved: (msg: string) => void
   onDelete?: () => void
 }) {
-  const [initialForm] = useState(() => formFromTask(task, initial))
+  // 新建模式且非模板进入时恢复草稿（编辑已有任务不做草稿，避免与磁盘态打架）
+  const draftAppliedRef = useRef(false)
+  const [initialForm] = useState<FormState>(() => {
+    const base = formFromTask(task, initial)
+    if (task === null && !initial) {
+      const merged = applyDraft(base, loadDraft())
+      if (merged !== base) draftAppliedRef.current = true
+      return merged
+    }
+    return base
+  })
+  const [draftRestored] = useState(() => draftAppliedRef.current)
   const [f, setF] = useState<FormState>(initialForm)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [pyInfo, setPyInfo] = useState<'checking' | 'ok' | 'missing' | null>(null)
+  const [findOpen, setFindOpen] = useState(false)
+
+  // 新建草稿自动保存（防抖 600ms）。三路判定：
+  // 等于挂载时的纯默认表单 → 清除草稿；等于打开时的初始表单 → 不动（未修改，别把已有草稿洗掉）；否则保存
+  const [pristineForm] = useState<FormState>(() => formFromTask(null))
+  useEffect(() => {
+    if (task !== null) return
+    const t = setTimeout(() => {
+      if (JSON.stringify(f) === JSON.stringify(pristineForm)) clearDraft()
+      else if (JSON.stringify(f) !== JSON.stringify(initialForm)) saveDraft(f)
+    }, 600)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f, task])
 
   // 有未保存修改时关闭需确认（Esc / 取消 / 遮罩 / 右上角 X 都走 requestClose）
   const dirty = JSON.stringify(f) !== JSON.stringify(initialForm)
@@ -282,10 +460,11 @@ export function TaskEditor({
       setError(r.error ?? '保存失败')
       return
     }
+    if (!task) clearDraft() // 新建落库后草稿完成使命
     onSaved(task ? '已保存修改' : '任务已创建')
   }
 
-  // Ctrl+S 保存：编辑器挂载期间的全局快捷键（含焦点在代码编辑区内），经 ref 取最新闭包
+  // Ctrl+S 保存、Ctrl+F 查找：编辑器挂载期间的全局快捷键（含焦点在代码编辑区内），经 ref 取最新闭包
   const saveRef = useRef(save)
   saveRef.current = save
   useEffect(() => {
@@ -293,6 +472,9 @@ export function TaskEditor({
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         saveRef.current()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setFindOpen(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -345,6 +527,14 @@ export function TaskEditor({
       onClose={requestClose}
       testid="task-editor"
       className="editor-sheet"
+      onEsc={() => {
+        // 查找条打开时 Esc 只收起查找条，不关编辑器
+        if (findOpen) {
+          setFindOpen(false)
+          return true
+        }
+        return false
+      }}
       footer={
         <>
           {task && onDelete && (
@@ -379,6 +569,11 @@ export function TaskEditor({
           onChange={(e) => set({ name: e.target.value })}
           data-testid="field-name"
         />
+        {draftRestored && (
+          <div className="form-hint ok" data-testid="draft-restored">
+            已恢复上次未完成的草稿；保存或放弃修改后自动清除
+          </div>
+        )}
       </div>
 
       <div className="form-sec">
@@ -397,6 +592,8 @@ export function TaskEditor({
           onChange={(v) => set({ command: v })}
           placeholder={PLACEHOLDER[f.runType]}
           testid="field-command"
+          findOpen={findOpen}
+          onFindToggle={setFindOpen}
         />
         {needsCmdFix && (
           <div className="form-hint warn" data-testid="bash-warn">
@@ -617,7 +814,10 @@ export function TaskEditor({
           message="编辑器中有尚未保存的修改，关闭后将无法恢复。"
           confirmLabel="放弃修改"
           onCancel={() => setConfirmDiscard(false)}
-          onConfirm={onClose}
+          onConfirm={() => {
+            if (!task) clearDraft() // 新建模式下点「放弃修改」= 明确不要这份草稿
+            onClose()
+          }}
         />
       )}
     </Sheet>

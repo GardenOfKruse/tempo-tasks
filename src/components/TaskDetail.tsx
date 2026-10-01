@@ -3,7 +3,7 @@ import type { RunRecord, Task } from '../api'
 import { RUN_TYPE_FULL, STATUS_LABEL, TRIGGER_LABEL, fmtAt, fmtCountdown, fmtDur, fmtRel } from '../format'
 import { Icon } from '../icons'
 import { formatSchedule } from '../../electron/schedule'
-import { matchRunFilter, summarizeRuns, type RunFilter } from '../../electron/runs'
+import { matchRunFilter, rebuildMerged, summarizeRuns, type RunFilter } from '../../electron/runs'
 import { Sheet, ConfirmBox } from './common'
 
 function RunIco({ status }: { status: RunRecord['status'] }) {
@@ -16,24 +16,30 @@ function RunIco({ status }: { status: RunRecord['status'] }) {
   )
 }
 
+type OutView = 'merged' | 'stdout' | 'stderr'
+
 function TermView({ record }: { record: RunRecord }) {
-  const [tab, setTab] = useState<'stdout' | 'stderr'>('stdout')
+  const [tab, setTab] = useState<OutView>('merged')
   const bodyRef = useRef<HTMLPreElement>(null)
-  const text = tab === 'stdout' ? record.stdout : record.stderr
+  // 合并视图：按游标快照重建真实交错顺序（stderr 红色）；旧记录回退为输出后跟错误
+  const segs = useMemo(
+    () => (tab === 'merged' ? rebuildMerged(record.marks, record.stdout, record.stderr) : null),
+    [tab, record.marks, record.stdout, record.stderr],
+  )
+  const text = tab === 'stdout' ? record.stdout : tab === 'stderr' ? record.stderr : ''
+  const empty = tab === 'merged' ? segs!.length === 0 : text.trim() === ''
 
   useEffect(() => {
     const el = bodyRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [text, tab])
-
-  useEffect(() => {
-    // 运行结束自动切到有内容的错误流
-    if (record.endedAt !== null && record.status !== 'success' && record.stderr.trim() !== '') setTab('stderr')
-  }, [record.endedAt, record.status, record.stderr])
+  }, [text, segs, tab])
 
   return (
     <div className="term">
       <div className="term-tabs">
+        <button className={tab === 'merged' ? 'on' : ''} onClick={() => setTab('merged')} data-testid="term-merged">
+          合并
+        </button>
         <button className={tab === 'stdout' ? 'on' : ''} onClick={() => setTab('stdout')}>
           输出
         </button>
@@ -50,8 +56,20 @@ function TermView({ record }: { record: RunRecord }) {
           复制全部
         </button>
       </div>
-      {text.trim() === '' ? (
+      {empty ? (
         <div className="empty-out">{record.status === 'running' ? '等待输出…' : '（无内容）'}</div>
+      ) : tab === 'merged' ? (
+        <pre ref={bodyRef}>
+          {segs!.map((sg, i) =>
+            sg.s === 1 ? (
+              <span key={i} className="seg-err" title="stderr">
+                {sg.t}
+              </span>
+            ) : (
+              <span key={i}>{sg.t}</span>
+            ),
+          )}
+        </pre>
       ) : (
         <pre ref={bodyRef} className={tab === 'stderr' ? 'err' : ''}>
           {text}

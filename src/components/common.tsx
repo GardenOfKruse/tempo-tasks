@@ -156,6 +156,8 @@ export function Sheet({
   wide,
   testid,
   className,
+  /** 返回 true 表示 Esc 已被内层（如查找替换条）消费，不关闭面板 */
+  onEsc,
 }: {
   title: React.ReactNode
   onClose: () => void
@@ -164,17 +166,19 @@ export function Sheet({
   wide?: boolean
   testid?: string
   className?: string
+  onEsc?: () => boolean
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (onEsc && onEsc()) return
         e.stopPropagation()
         onClose()
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [onClose, onEsc])
 
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

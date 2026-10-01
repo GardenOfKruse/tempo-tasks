@@ -9,6 +9,7 @@ import { SettingsSheet } from './components/SettingsSheet'
 import { duplicateTaskInput } from '../electron/schedule'
 import { STARTER_TEMPLATES, type StarterTemplate } from '../electron/templates'
 import { displayClock, isFailStatus } from '../electron/runs'
+import { clearDraft } from './draft'
 
 type Filter = 'all' | 'running' | 'paused' | 'failed' | 'missed'
 
@@ -164,6 +165,8 @@ export default function App() {
         if (editingRef.current !== null) return // 已在编辑器中：不覆盖未保存草稿
         setEditing('new')
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        // 编辑器打开时 Ctrl+F 归编辑器内的查找替换（TaskEditor 里 preventDefault 并打开查找条）
+        if (editingRef.current !== null) return
         e.preventDefault()
         searchRef.current?.focus()
       }
@@ -234,6 +237,7 @@ export default function App() {
   }, [])
 
   const startFromTemplate = useCallback((tpl: StarterTemplate) => {
+    clearDraft() // 从模板开始是明确的新意图，不恢复旧草稿
     setDraftInput(structuredClone(tpl.input))
     setEditing('new')
   }, [])

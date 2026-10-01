@@ -484,6 +484,12 @@ textarea.field {
   animation: card-in 320ms var(--ease) backwards;
 }
 
+/* 键盘导航（Tab / 方向键）时的焦点圈，鼠标点击不显示 */
+.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @keyframes card-in {
   from {
     opacity: 0;
@@ -1472,6 +1478,11 @@ textarea.field {
   color: #ff8f88;
 }
 
+/* 合并视图：stderr 段落行内标红 */
+.term pre .seg-err {
+  color: #ff8f88;
+}
+
 .term .empty-out {
   padding: 18px 14px;
   font-size: 12px;
@@ -1786,11 +1797,85 @@ textarea.field {
 
 .code-area {
   display: flex;
+  flex-direction: column;
   background: var(--term-bg);
   border-radius: 12px;
   overflow: hidden;
   height: 300px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* 查找条 + 编辑主体的行布局 */
+.code-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 查找替换条（Ctrl+F）：命令编辑区的深色浮层行 */
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.find-input {
+  height: 26px;
+  width: 132px;
+  padding: 0 9px;
+  border: none;
+  outline: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--term-text);
+  font-size: 12px;
+}
+
+.find-input:focus {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.find-input::placeholder {
+  color: rgba(232, 232, 236, 0.3);
+}
+
+.find-count {
+  font-size: 11.5px;
+  color: rgba(232, 232, 236, 0.55);
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.find-count.none {
+  color: #ff8f88;
+}
+
+.find-bar button {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  color: rgba(232, 232, 236, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  transition: all 140ms ease;
+}
+
+.find-bar button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.find-bar button:disabled {
+  opacity: 0.4;
 }
 
 .code-area:focus-within {

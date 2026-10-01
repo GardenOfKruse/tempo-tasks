@@ -47,6 +47,10 @@ export interface TaskInput {
   concurrency?: ConcurrencyPolicy
 }
 
+/** 输出交错游标快照 [stdoutChars, stderrChars]：每个输出事件后两流已消费的字符数。
+ *  只存数字不存文本，详情页用它从 stdout/stderr 精确重建真实交错顺序（合并视图）。 */
+export type MergeMark = [number, number]
+
 export interface RunRecord {
   id: string
   taskId: string
@@ -59,6 +63,7 @@ export interface RunRecord {
   stdout: string // 尾部截断
   stderr: string
   truncated: boolean
+  marks?: MergeMark[] // v0.9+ 记录；旧数据无此字段，合并视图回退为「输出后跟错误」
 }
 
 export interface Settings {

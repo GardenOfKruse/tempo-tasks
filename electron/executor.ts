@@ -2,9 +2,10 @@
 import { spawn, ChildProcess } from 'node:child_process'
 import * as os from 'node:os'
 import * as fs from 'node:fs'
-import type { RunRecord, RunType, Task, TriggerKind } from './types'
+import type { MergeMark, RunRecord, RunType, Task, TriggerKind } from './types'
 import { MAX_OUTPUT_CHARS, newId } from './types'
 import { isBashStyleMultiLine, toCmdCompat } from './fixcmd'
+import { pushMark, shiftMarks } from './runs'
 
 export interface ExecutorEvents {
   onRunUpdate(record: RunRecord): void
@@ -20,6 +21,11 @@ interface RunningProc {
 function truncate(s: string, alreadyTruncated: boolean): { text: string; truncated: boolean } {
   if (s.length <= MAX_OUTPUT_CHARS) return { text: s, truncated: alreadyTruncated }
   return { text: `…[前段输出已截断]\n${s.slice(s.length - MAX_OUTPUT_CHARS)}`, truncated: true }
+}
+
+/** 尾部截断后把交错游标平移到新字符串坐标系（新头部标记长度已被差值天然补偿，越界由 shiftMarks 钳到 0） */
+function shiftForTruncate(marks: MergeMark[], oldOut: string, oldErr: string, tOut: { text: string }, tErr: { text: string }): void {
+  shiftMarks(marks, oldOut.length - tOut.text.length, oldErr.length - tErr.text.length)
 }
 
 /** UTF-8 优先；出现替换符时回退 GBK（中文 cmd 输出常见） */
@@ -92,6 +98,9 @@ export class Executor {
     const cwd = task.cwd && task.cwd.trim() !== '' ? task.cwd.trim() : os.homedir()
     const emit = () => this.eventSink?.onRunUpdate({ ...record })
 
+    // 合并视图游标：每个输出事件后记一拍，详情页据此重建真实交错顺序
+    const marks: MergeMark[] = (record.marks = [])
+
     const finish = (status: RunRecord['status'], exitCode: number | null) => {
       if (record.endedAt !== null) return
       record.endedAt = Date.now()
@@ -109,6 +118,7 @@ export class Executor {
       record.stdout = strayQuote
         ? '[Tempo] 检测到 Bash 风格多行命令，已自动合并为单行执行（命令含未配对单引号，未能自动转换引号，如失败请手动调整）\r\n\r\n'
         : '[Tempo] 检测到 Bash 风格多行命令，已自动转换为 CMD 兼容单行执行\r\n\r\n'
+      pushMark(marks, record.stdout, record.stderr)
     }
     const { file, args } = buildArgs(task.runType, runCommand)
 
@@ -116,6 +126,7 @@ export class Executor {
     try {
       if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
         record.stderr = `工作目录不存在：${cwd}`
+        pushMark(marks, record.stdout, record.stderr)
         finish('failed', null)
         return record
       }
@@ -130,6 +141,7 @@ export class Executor {
       })
     } catch (e) {
       record.stderr = `无法启动进程：${e instanceof Error ? e.message : String(e)}`
+      pushMark(marks, record.stdout, record.stderr)
       finish('failed', null)
       return record
     }
@@ -152,7 +164,11 @@ export class Executor {
         stdoutLen -= stdoutBuf[0].length
         stdoutBuf.shift()
       }
+      const prevLen = record.stdout.length
       record.stdout = decodeSmart(Buffer.concat(stdoutBuf))
+      // 流首被静默丢弃：游标同步平移，重建才不会重复发射旧文本
+      if (record.stdout.length < prevLen) shiftMarks(marks, prevLen - record.stdout.length, 0)
+      pushMark(marks, record.stdout, record.stderr)
       emit()
     })
     child.stderr!.on('data', (chunk: Buffer) => {
@@ -162,7 +178,10 @@ export class Executor {
         stderrLen -= stderrBuf[0].length
         stderrBuf.shift()
       }
+      const prevLen = record.stderr.length
       record.stderr = decodeSmart(Buffer.concat(stderrBuf))
+      if (record.stderr.length < prevLen) shiftMarks(marks, 0, prevLen - record.stderr.length)
+      pushMark(marks, record.stdout, record.stderr)
       emit()
     })
 
@@ -178,16 +197,22 @@ export class Executor {
 
     child.on('error', (err) => {
       record.stderr = `${record.stderr}${record.stderr ? '\n' : ''}启动失败：${describeSpawnError(task.runType, err)}`
+      pushMark(marks, record.stdout, record.stderr)
       finish('failed', null)
     })
 
     child.on('close', (code, signal) => {
       if (timer) clearTimeout(timer)
-      const tOut = truncate(record.stdout, false)
+      const oldOut = record.stdout
+      const oldErr = record.stderr
+      const tOut = truncate(oldOut, false)
       record.stdout = tOut.text
-      const tErr = truncate(record.stderr, false)
+      const tErr = truncate(oldErr, false)
       record.stderr = tErr.text
       record.truncated = tOut.truncated || tErr.truncated
+      // 截断改变了字符串坐标系：先平移游标再补最后一拍，重建结果与最终文本严格一致
+      shiftForTruncate(marks, oldOut, oldErr, tOut, tErr)
+      pushMark(marks, record.stdout, record.stderr)
       // 判定优先级：先排除毫秒级竞态（进程恰在超时/停止边界前自然成功退出），
       // 再按 kill 标志归类，最后按退出码
       if (code === 0 && !proc.timedOut && !proc.killedByUser) finish('success', 0)

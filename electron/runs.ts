@@ -1,5 +1,5 @@
 /** 运行历史与卡片时钟的共享纯函数（主进程逻辑 / 渲染端展示 / 单测通用） */
-import type { RunRecord, RunStatus } from './types'
+import type { MergeMark, RunRecord, RunStatus } from './types'
 
 export type RunFilter = 'all' | 'ok' | 'fail'
 
@@ -72,4 +72,64 @@ export function displayClock(opts: { nextRunAt: number | null; lastRunAt: number
     if (diff <= 3_600_000) return Math.floor(now / 15_000) * 15_000
   }
   return Math.floor(now / 60_000) * 60_000
+}
+
+/* ---------- 合并输出视图：交错游标快照与重建（v0.9） ---------- */
+
+/** marks 封顶：超出丢弃最早的一半（每项只是两个数字，重建时早期交错粗化为一段） */
+export const MAX_MARKS = 400
+
+/** 记录一次输出事件后的游标快照；返回截断后的新数组（原地复用入参减少分配） */
+export function pushMark(marks: MergeMark[], stdout: string, stderr: string): MergeMark[] {
+  marks.push([stdout.length, stderr.length])
+  if (marks.length > MAX_MARKS) marks.splice(0, marks.length - MAX_MARKS / 2)
+  return marks
+}
+
+/** 流首被丢弃（尾部截断）后整体平移游标：shift = 丢弃的字符数 - 新增的头部标记长度，可为负 */
+export function shiftMarks(marks: MergeMark[], shiftOut: number, shiftErr: number): void {
+  for (let i = 0; i < marks.length; i++) {
+    marks[i] = [Math.max(0, marks[i][0] - shiftOut), Math.max(0, marks[i][1] - shiftErr)]
+  }
+}
+
+export interface MergedSeg {
+  /** 0 = stdout，1 = stderr（渲染端 stderr 标红） */
+  s: 0 | 1
+  t: string
+}
+
+/**
+ * 从游标快照重建真实交错序列（切片自最终 stdout/stderr，与两个 tab 视图严格同源）。
+ * 无 marks 的旧记录回退为「全部输出后跟全部错误」；游标回退（流首截断）只推进游标不重复发射——
+ * 截断标记已内嵌在字符串头部，会随后续切片自然出现。
+ */
+export function rebuildMerged(marks: MergeMark[] | undefined, stdout: string, stderr: string): MergedSeg[] {
+  if (!marks || marks.length === 0) {
+    const segs: MergedSeg[] = []
+    if (stdout !== '') segs.push({ s: 0, t: stdout })
+    if (stderr !== '') segs.push({ s: 1, t: stderr })
+    return segs
+  }
+  const segs: MergedSeg[] = []
+  const push = (s: 0 | 1, text: string) => {
+    if (text !== '') segs.push({ s, t: text })
+  }
+  let po = 0
+  let pe = 0
+  for (const [o, e] of marks) {
+    if (o > po) {
+      push(0, stdout.slice(po, o))
+      po = o
+    } else if (o < po) {
+      po = o // 流首被截断：游标退回，新头部随下一拍自然带出
+    }
+    if (e > pe) {
+      push(1, stderr.slice(pe, e))
+      pe = e
+    } else if (e < pe) {
+      pe = e
+    }
+  }
+  return segs
 }
