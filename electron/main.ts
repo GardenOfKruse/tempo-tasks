@@ -71,8 +71,7 @@ function maybeNotify(record: RunRecord): void {
     silent: false,
   })
   n.on('click', () => {
-    mainWindow?.show()
-    mainWindow?.focus()
+    showMainWindow()
     mainWindow?.webContents.send('tempo:open-task', task.id)
   })
   n.show()
@@ -236,6 +235,12 @@ function registerIpc(): void {
       d.tasks = d.tasks.filter((t) => t.id !== id)
       delete d.runs[id]
     })
+    // 同步删除落盘日志（与 runs:clear 一致，避免孤儿目录无限累积）
+    try {
+      fs.rmSync(path.join(dataDir, RUNS_LOG_DIR, id), { recursive: true, force: true })
+    } catch {
+      /* 目录不存在或被占用时忽略 */
+    }
     mainWindow?.webContents.send('tempo:tasks-changed', store.snapshot.tasks)
     return { ok: true }
   })
