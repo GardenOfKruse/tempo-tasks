@@ -28,7 +28,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     input: {
       name: '每日桌面备份',
       runType: 'cmd',
-      command: 'robocopy "%USERPROFILE%\\Desktop" "%USERPROFILE%\\Documents\\DesktopBackup" /E /R:2 /W:2',
+      command: 'robocopy "%USERPROFILE%\\Desktop" "%USERPROFILE%\\Documents\\DesktopBackup" /E /R:2 /W:2 & if errorlevel 8 (echo backup failed & exit /b 8) else (echo backup done & exit /b 0)',
       timeoutSec: 0,
       schedule: { kind: 'daily', time: '18:00' },
     },

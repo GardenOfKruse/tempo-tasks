@@ -105,7 +105,9 @@ export default function App() {
         setLiveRuns((prev) => {
           const next = { ...prev }
           if (record.endedAt === null) next[record.taskId] = record
-          else delete next[record.taskId]
+          // 并行多实例：仅当被替换的直播条目就是这条结束记录时才清掉，
+          // 否则先结束的一轮会把仍在跑的后一轮直播状态误删
+          else if (next[record.taskId]?.id === record.id) delete next[record.taskId]
           return next
         })
         setRunningIds((prev) => {
@@ -121,6 +123,9 @@ export default function App() {
           // ref 与 state 同步写：tasks-changed 的 refetch 用 ref 全量替换，漏写会让终态回退为旧记录
           lastRunsRef.current[record.taskId] = record
           setLastRuns((prev) => ({ ...prev, [record.taskId]: record }))
+          // 并行多实例：仅当被替换的直播条目就是这条结束记录时才清掉，
+          // 否则先结束的一轮会把仍在跑的后一轮直播状态误删
+          setLiveRuns((prev) => (prev[record.taskId]?.id === record.id ? (() => { const n = { ...prev }; delete n[record.taskId]; return n })() : prev))
           if (record.status === 'failed' || record.status === 'timeout') {
             window.tempo.listTasks().then((ts) => {
               const t = ts.find((x) => x.id === record.taskId)
