@@ -1,6 +1,6 @@
 {
   "name": "tempo-tasks",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Tempo · 好看的 Windows 定时任务卡片工具",
   "main": "dist-electron/main.js",
   "author": "GardenOfKruse",

@@ -27,6 +27,7 @@ export default function App() {
   const [runningIds, setRunningIds] = useState<Map<string, Set<string>>>(new Map())
   const isRunning = useCallback((id: string) => (runningIds.get(id)?.size ?? 0) > 0, [runningIds])
   const [liveRuns, setLiveRuns] = useState<Record<string, RunRecord>>({})
+  const [runsVersion, setRunsVersion] = useState(0)
   const [lastRuns, setLastRuns] = useState<Record<string, RunRecord | null>>({})
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [filter, setFilter] = useState<Filter>('all')
@@ -126,6 +127,8 @@ export default function App() {
           // 并行多实例：仅当被替换的直播条目就是这条结束记录时才清掉，
           // 否则先结束的一轮会把仍在跑的后一轮直播状态误删
           setLiveRuns((prev) => (prev[record.taskId]?.id === record.id ? (() => { const n = { ...prev }; delete n[record.taskId]; return n })() : prev))
+          // 任一实例结束都递增版本号，驱动详情页历史重取（否则先结束的记录迟迟不进列表）
+          setRunsVersion((v) => v + 1)
           if (record.status === 'failed' || record.status === 'timeout') {
             window.tempo.listTasks().then((ts) => {
               const t = ts.find((x) => x.id === record.taskId)
@@ -520,6 +523,7 @@ export default function App() {
         <TaskDetail
           task={detailTask}
           live={liveRuns[detailTask.id] ?? null}
+          runsVersion={runsVersion}
           now={now}
           onClose={() => setDetailId(null)}
           onEdit={() => {

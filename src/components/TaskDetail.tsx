@@ -82,6 +82,7 @@ function TermView({ record }: { record: RunRecord }) {
 export function TaskDetail({
   task,
   live,
+  runsVersion,
   now,
   onClose,
   onEdit,
@@ -97,6 +98,7 @@ export function TaskDetail({
   onRun: () => void
   onStop: () => void
   onToggleEnabled: () => void
+  runsVersion: number
 }) {
   const [runs, setRuns] = useState<RunRecord[] | null>(null)
   const [openRunId, setOpenRunId] = useState<string | null>(null)
@@ -104,14 +106,18 @@ export function TaskDetail({
   const [confirmClear, setConfirmClear] = useState(false)
   const running = live !== null
 
+  const autoExpandedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     window.tempo.listRuns(task.id).then((rs) => {
       setRuns(rs)
-      // 最近一次失败则自动展开它
+      // 仅首次自动展开最近一次失败；之后不重放（避免覆盖用户手动收起）
       const last = rs.at(-1)
-      if (last && (last.status === 'failed' || last.status === 'timeout')) setOpenRunId(last.id)
+      if (last && (last.status === 'failed' || last.status === 'timeout') && !autoExpandedRef.current.has(task.id)) {
+        autoExpandedRef.current.add(task.id)
+        setOpenRunId(last.id)
+      }
     })
-  }, [task.id, task.updatedAt])
+  }, [task.id, task.updatedAt, runsVersion])
 
   // 运行结束时刷新历史
   useEffect(() => {

@@ -269,6 +269,12 @@ function registerIpc(): void {
   ipcMain.handle('runs:clear', (_e, taskId: string) => {
     if (!taskById(taskId)) return { ok: false, error: '任务不存在' }
     store.clearRuns(taskId)
+    // 同步删除落盘日志（确认文案已承诺"含输出将被删除"）
+    try {
+      fs.rmSync(path.join(dataDir, RUNS_LOG_DIR, taskId), { recursive: true, force: true })
+    } catch {
+      /* 日志目录不存在或被占用时忽略 */
+    }
     // 卡片的「上次结果」由渲染端缓存，广播清空事件让其重取
     mainWindow?.webContents.send('tempo:runs-changed', taskId)
     return { ok: true }
@@ -360,8 +366,9 @@ function registerIpc(): void {
         : path.join(dataDir, RUNS_LOG_DIR)
     try {
       fs.mkdirSync(dir, { recursive: true })
-    } catch {
-      /* 目录创建失败时仍尝试打开父级 */
+    } catch (e) {
+      mainWindow?.webContents.send('tempo:notice', '日志目录不可用（数据盘只读或权限异常）')
+      return
     }
     spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore' }).unref?.()
   })
