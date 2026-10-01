@@ -3,14 +3,24 @@ import { Icon, type IconName } from '../icons'
 
 /* ---------- 开关 ---------- */
 
-export function Switch({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+export function Switch({
+  on,
+  onChange,
+  disabled,
+  testid,
+}: {
+  on: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+  testid?: string
+}) {
   return (
     <button
       className={`switch${on ? ' on' : ''}`}
       style={disabled ? { opacity: 0.4, pointerEvents: 'none' } : undefined}
       role="switch"
       aria-checked={on}
-      data-testid="switch"
+      data-testid={testid ?? 'switch'}
       onClick={() => onChange(!on)}
     />
   )

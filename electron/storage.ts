@@ -15,7 +15,7 @@ const DEFAULT_DATA: StoreData = {
   schemaVersion: 1,
   tasks: [],
   runs: {},
-  settings: { theme: 'system', sortMode: 'created', minimizeToTray: false, writeRunLogs: false },
+  settings: { theme: 'system', sortMode: 'created', minimizeToTray: false, writeRunLogs: false, autoStart: false },
 }
 
 function isValidTaskShape(t: unknown): t is Task {

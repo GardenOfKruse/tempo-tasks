@@ -1,0 +1,16 @@
+import { launchTempo, closeApp } from '../tests/e2e/probe.mjs'
+import { execSync } from 'node:child_process'
+const { app, win, dataDir } = await launchTempo({})
+await win.waitForSelector('.app', { timeout: 10000 })
+const r = await win.evaluate(() => window.tempo.setLoginItem(true))
+console.log('setLoginItem 返回:', JSON.stringify(r))
+const all = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"', { encoding: 'utf-8' })
+console.log('--- HKCU Run 全部值 ---')
+console.log(all.split('\n').filter((l) => l.includes('REG_SZ')).map((l) => l.trim().slice(0, 70)).join('\n'))
+const off = await win.evaluate(() => window.tempo.setLoginItem(false))
+console.log('关闭返回:', JSON.stringify(off))
+const all2 = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"', { encoding: 'utf-8' })
+console.log('--- 关闭后 ---')
+console.log(all2.split('\n').filter((l) => l.includes('REG_SZ')).map((l) => l.trim().slice(0, 50)).join('\n'))
+await closeApp(app)
+process.exit(0)

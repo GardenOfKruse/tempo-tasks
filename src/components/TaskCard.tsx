@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { RunRecord, Task } from '../api'
-import { RUN_TYPE_LABEL, fmtCountdown, fmtDur, fmtRel } from '../format'
+import { RUN_TYPE_LABEL, fmtCountdown, fmtDur, fmtNextTime, fmtRel } from '../format'
 import { Icon } from '../icons'
 import { formatSchedule } from '../../electron/schedule'
 import { splitHighlight } from '../../electron/highlight'
@@ -146,6 +146,8 @@ export const TaskCard = memo(function TaskCard(p: TaskCardProps) {
               <>
                 <span className="label">接下来</span>
                 <span className="val">{fmtCountdown(t.nextRunAt, p.now)}</span>
+                {/* 倒计时是相对文案（<1h）时补一个静态具体时刻；更远时倒计时本身已是时刻，不重复 */}
+                {t.nextRunAt - p.now < 3_600_000 && <span className="next-at">{fmtNextTime(t.nextRunAt, p.now)}</span>}
               </>
             ) : t.schedule.kind === 'once' ? (
               t.missedOnce ? (

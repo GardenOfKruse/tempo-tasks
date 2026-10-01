@@ -26,6 +26,7 @@ const api = {
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:set', patch),
   appInfo: () => ipcRenderer.invoke('app:info'),
+  setLoginItem: (enabled: boolean): Promise<{ openAtLogin: boolean }> => ipcRenderer.invoke('app:setLoginItem', enabled),
   openDataDir: () => ipcRenderer.invoke('app:openDataDir'),
   openRunsDir: (taskId?: string) => ipcRenderer.invoke('app:openRunsDir', taskId),
   chooseFolder: (): Promise<string | null> => ipcRenderer.invoke('app:chooseFolder'),

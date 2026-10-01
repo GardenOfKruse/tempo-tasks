@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Settings } from '../api'
-import { Sheet } from './common'
+import { Sheet, Switch } from './common'
 import { Icon } from '../icons'
 
 /** 独立设置面板：外观 / 行为 / 数据 / 关于。点击即保存 + toast，与原弹出菜单一致 */
@@ -19,6 +19,19 @@ export function SettingsSheet({
   useEffect(() => {
     window.tempo.appInfo().then((info) => setVersion(info.version))
   }, [])
+
+  // 开机自启：先写系统登录项，拿到注册表真值后再回显/持久化（写失败不假装成功）
+  const toggleAutoStart = () => {
+    const next = settings.autoStart !== true
+    window.tempo.setLoginItem(next).then(
+      (r) => {
+        onPatch({ autoStart: r.openAtLogin })
+        if (r.openAtLogin === next) toast(next ? '已开启：开机自动启动 Tempo（静默，不弹窗）' : '已关闭开机自动启动')
+        else toast('设置未生效，可能被系统策略限制', 'err')
+      },
+      () => toast('开机自动启动设置失败', 'err'),
+    )
+  }
 
   const exportTasks = () => {
     window.tempo.exportTasks().then((r) => {
@@ -97,6 +110,13 @@ export function SettingsSheet({
                 </button>
               ))}
             </div>
+          </div>
+          <div className="set-row">
+            <div className="set-row-txt">
+              <div>开机自动启动</div>
+              <div className="set-row-desc">开机静默启动（不弹窗），配合错过补跑，重启电脑也不丢任务</div>
+            </div>
+            <Switch on={settings.autoStart === true} onChange={toggleAutoStart} testid="settings-autostart" />
           </div>
           <div className="set-row">
             <span>运行日志落盘</span>

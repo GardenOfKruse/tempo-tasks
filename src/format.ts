@@ -1,5 +1,8 @@
 /** 时间与状态展示格式化 */
 import type { RunStatus, RunType, TriggerKind } from './api'
+import { dayDiff, fmtNextTime } from '../electron/timefmt'
+
+export { fmtNextTime }
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n)
@@ -10,20 +13,10 @@ export function fmtCountdown(nextMs: number | null, now: number): string {
   if (nextMs === null) return '—'
   const diff = nextMs - now
   if (diff <= 0) return '即将执行'
-  const d = new Date(nextMs)
-  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   // 秒级倒数只保留最后一分钟；更远只到分钟（配合卡片时钟分桶，避免逐秒重渲染）
   if (diff < 60_000) return `${Math.ceil(diff / 1000)} 秒后`
   if (diff < 3_600_000) return `${Math.ceil(diff / 60_000)} 分钟后`
-  const today0 = new Date(now)
-  today0.setHours(0, 0, 0, 0)
-  const next0 = new Date(nextMs)
-  next0.setHours(0, 0, 0, 0)
-  const days = Math.round((next0.getTime() - today0.getTime()) / 86_400_000)
-  if (days === 0) return `今天 ${hhmm}`
-  if (days === 1) return `明天 ${hhmm}`
-  if (days < 7) return `周${'日一二三四五六'[d.getDay()]} ${hhmm}`
-  return `${d.getMonth() + 1}/${d.getDate()} ${hhmm}`
+  return fmtNextTime(nextMs, now)
 }
 
 function isSameDay(a: number, b: number): boolean {
@@ -67,11 +60,7 @@ export function fmtAt(ms: number | null): string {
 export function fmtWhen(ms: number, now: number): string {
   const d = new Date(ms)
   const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  const today0 = new Date(now)
-  today0.setHours(0, 0, 0, 0)
-  const day0 = new Date(ms)
-  day0.setHours(0, 0, 0, 0)
-  const days = Math.round((day0.getTime() - today0.getTime()) / 86_400_000)
+  const days = dayDiff(ms, now)
   if (days === 0) return `今天 ${hhmm}`
   if (days === 1) return `明天 ${hhmm}`
   return `${d.getMonth() + 1}/${d.getDate()} ${hhmm}`

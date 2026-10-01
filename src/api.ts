@@ -19,6 +19,7 @@ interface TempoApi {
   getSettings(): Promise<Settings>
   setSettings(patch: Partial<Settings>): Promise<Settings>
   appInfo(): Promise<{ version: string; dataDir: string; electron: string; readyMs: number | null }>
+  setLoginItem(enabled: boolean): Promise<{ openAtLogin: boolean }>
   openDataDir(): Promise<void>
   openRunsDir(taskId?: string): Promise<void>
   chooseFolder(): Promise<string | null>

@@ -8,6 +8,7 @@ import { Scheduler } from './scheduler'
 import { validateTaskInput } from './schedule'
 import { buildExport, parseImport } from './transfer'
 import { resolveCloseBehavior, trayActions, TRAY_TOOLTIP } from './tray'
+import { launchedByAutoStart, resolveLoginItem } from './autostart'
 import { RUNS_LOG_DIR, buildRunLog, pruneRunLogFiles, runLogFileName } from './runlog'
 import type { RunRecord, Settings, Task, TaskInput, TriggerKind } from './types'
 import { newId } from './types'
@@ -34,6 +35,8 @@ let tray: Tray | null = null
 let quitting = false
 let gotFirstPaint = false
 let gotFirstPaintAt: number | null = null
+// 开机自启拉起（登录项带 --hidden）：启动后不弹主窗口，靠托盘/再次启动恢复
+const startHidden = launchedByAutoStart(process.argv)
 
 // ---- IPC 广播节流：输出流最多 150ms 一条，完成时立即 ----
 const lastSentAt = new Map<string, number>()
@@ -133,7 +136,8 @@ function showMainWindow(): void {
 }
 
 function syncTray(settings: Settings): void {
-  if (settings.minimizeToTray === true && tray === null) {
+  // 静默启动时窗口不可见：即使未开启「最小化到托盘」也强制建托盘，保证有恢复入口
+  if ((settings.minimizeToTray === true || startHidden) && tray === null) {
     tray = new Tray(path.join(__dirname, '..', 'build', 'icon.ico'))
     tray.setToolTip(TRAY_TOOLTIP)
     tray.setContextMenu(
@@ -338,6 +342,13 @@ function registerIpc(): void {
     electron: process.versions.electron,
     readyMs: gotFirstPaintAt,
   }))
+  ipcMain.handle('app:setLoginItem', (_e, enabled: boolean) => {
+    const settings = resolveLoginItem(enabled === true, app.getPath('exe'))
+    app.setLoginItemSettings(settings)
+    // 读回注册表真值（写失败时 openAtLogin 与预期不符，渲染端按真值回显）；
+    // 读取需传与写入相同的 path/args 才能匹配到同一条目
+    return { openAtLogin: app.getLoginItemSettings({ path: settings.path, args: settings.args }).openAtLogin }
+  })
   ipcMain.handle('app:openDataDir', () => {
     spawn('explorer.exe', [dataDir], { detached: true, stdio: 'ignore' }).unref?.()
   })
@@ -438,7 +449,8 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     // 离屏测试模式完全不显示窗口：夜间/用户在场时跑自动化不抢焦点
-    if (process.env.TEMPO_OFFSCREEN !== '1') mainWindow?.show()
+    // 开机自启（--hidden）静默启动：不 show，调度照常进行
+    if (process.env.TEMPO_OFFSCREEN !== '1' && !startHidden) mainWindow?.show()
   })
   mainWindow.webContents.on('did-finish-load', () => {
     if (!gotFirstPaint) {
