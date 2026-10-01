@@ -136,12 +136,26 @@ export class Store {
     } catch {
       /* 目录已存在或不可创建（后者在首次写入时报错） */
     }
-    for (const f of [this.file, this.bakFile]) {
+    // 恢复链：主文件 → .bak → 每日快照（最新优先）
+    const candidates = [this.file, this.bakFile]
+    try {
+      const snaps = fs
+        .readdirSync(this.backupDir)
+        .filter((n) => /^tempo-\d{4}-\d{2}-\d{2}\.json$/.test(n))
+        .sort()
+        .reverse()
+        .map((n) => path.join(this.backupDir, n))
+      candidates.push(...snaps)
+    } catch {
+      /* 无备份目录 */
+    }
+    for (const f of candidates) {
       try {
         if (!fs.existsSync(f)) continue
         const raw = JSON.parse(fs.readFileSync(f, 'utf-8'))
         if (raw && raw.schemaVersion === 1 && Array.isArray(raw.tasks)) {
           const tasks = (raw.tasks.filter(isValidTaskShape) as Task[]).map(migrateTask).map(withPinned)
+          if (f !== this.file) console.error(`[store] 已从 ${path.basename(f)} 恢复数据（主文件损坏）`)
           return {
             schemaVersion: 1,
             // 手改/旧结构数据：丢弃形状不完整的任务，避免调度循环崩坏
